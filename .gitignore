@@ -1,0 +1,11 @@
+# Bí mật — KHÔNG BAO GIỜ commit
+config.local.js
+*.key
+token.txt
+TOI-HIEU-RUI-RO.flag
+
+# Dữ liệu chạy
+du-lieu/
+node_modules/
+*.log
+DUNG.flag

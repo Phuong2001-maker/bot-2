@@ -1,0 +1,289 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bot OKX — Long/Short</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --nen:#0d1117; --the:#161b22; --vien:#272e3a; --chu:#e6edf3; --mo:#8b949e;
+    --xanh:#3fb950; --do:#f85149; --vang:#d29922; --lam:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--nen);color:var(--chu);
+       font:13px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace}
+  .boc{max-width:1700px;margin:0 auto;padding:12px}
+  h2{font-size:13px;font-weight:600;margin:18px 0 7px;color:var(--mo);
+     text-transform:uppercase;letter-spacing:.09em}
+  h2 span{text-transform:none;letter-spacing:0;font-weight:400;margin-left:10px}
+  /* KHÔNG có transition/animation ở đâu cả — trang này để đọc rồi đặt lệnh,
+     không phải để xem cho vui. Chỉ giá thị trường được đổi liên tục. */
+  .bar{background:var(--the);border:1px solid var(--vien);border-radius:7px;
+       padding:11px 14px;display:flex;flex-wrap:wrap;gap:9px 26px;align-items:center}
+  .bar.chet{border-color:var(--do);background:#2d1416}
+  .o{display:flex;flex-direction:column;gap:1px}
+  .o b{font-size:15px;font-weight:600}
+  .o s{font-size:10px;color:var(--mo);text-decoration:none;text-transform:uppercase;letter-spacing:.06em}
+  table{width:100%;border-collapse:collapse;background:var(--the);
+        border:1px solid var(--vien);border-radius:7px;overflow:hidden}
+  th{background:#1c2230;color:var(--mo);font-size:10px;font-weight:600;
+     text-transform:uppercase;letter-spacing:.06em;padding:7px 8px;text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:7px 8px;text-align:right;border-top:1px solid var(--vien);
+     white-space:nowrap;font-variant-numeric:tabular-nums}
+  tr.short td:first-child{border-left:3px solid var(--do)}
+  tr.long  td:first-child{border-left:3px solid var(--xanh)}
+  .x{color:var(--xanh)} .d{color:var(--do)} .v{color:var(--vang)}
+  .l{color:var(--lam)} .m{color:var(--mo)}
+  .cu{color:var(--mo);text-decoration:line-through;font-size:11px}
+  .du{font-size:11px;color:var(--mo)}
+  .cb{display:inline-block;background:#3a2a08;color:var(--vang);border:1px solid #5a4310;
+      border-radius:3px;padding:0 5px;font-size:10px;margin-left:3px}
+  .ok{display:inline-block;background:#0f2e17;color:var(--xanh);border:1px solid #1c5c2c;
+      border-radius:3px;padding:0 5px;font-size:10px}
+  .no{display:inline-block;background:#2d1416;color:var(--do);border:1px solid #5c1f22;
+      border-radius:3px;padding:0 5px;font-size:10px}
+  .cho{color:var(--mo);font-size:11px}
+  .trong{padding:22px;text-align:center;color:var(--mo);background:var(--the);
+         border:1px solid var(--vien);border-radius:7px}
+  .nut{margin-left:auto;background:#2d1416;color:var(--do);border:1px solid var(--do);
+       border-radius:5px;padding:6px 13px;font:inherit;font-size:11px}
+  .tuong td{font-size:11px;padding:4px 8px}
+  details{margin-top:5px}
+  summary{cursor:pointer;color:var(--mo);font-size:11px;padding:3px 0}
+  @media(max-width:900px){ .boc{padding:6px} td,th{padding:5px 4px;font-size:11px} }
+</style>
+
+<div class="boc">
+  <div class="bar" id="bar"></div>
+
+  <h2>Lệnh đang mở</h2>
+  <div id="hopLenh"></div>
+
+  <h2>Đang theo dõi</h2>
+  <div id="hopTheoDoi"></div>
+
+  <h2>Lịch sử gần đây <span id="tomTat"></span></h2>
+  <div id="hopLichSu"></div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+
+function fg(x){                       // giá — đủ chữ số có nghĩa cho mọi coin
+  if(x==null||!isFinite(x))return '—';
+  const a=Math.abs(x);
+  if(a>=1000)return x.toFixed(2);
+  if(a>=1)return x.toFixed(4);
+  if(a>=0.01)return x.toFixed(6);
+  if(a>=0.0001)return x.toFixed(8);
+  return Number(x).toPrecision(6);
+}
+const pc = x => (x==null||!isFinite(x))?'—':(x*100).toFixed(1)+'%';
+const pc2= x => (x==null||!isFinite(x))?'—':(x*100).toFixed(2)+'%';
+const usd= x => (x==null||!isFinite(x))?'—':(x<0?'-':'')+'$'+Math.abs(x).toFixed(2);
+const mau= x => x==null?'m':(x>0?'x':(x<0?'d':'m'));
+
+/* ---- bảng có KHOÁ: hàng cập nhật TẠI CHỖ, không xoá rồi vẽ lại.
+   Bất biến 11 của đặc tả: một dòng đang hiện không bao giờ biến mất
+   rồi hiện lại. Đây là chỗ thực thi nó. ---- */
+function veBang(hop, cot, hang, khoa, lop){
+  let t = hop.querySelector('table');
+  if(!t){
+    hop.innerHTML='';
+    t=document.createElement('table');
+    const th=document.createElement('thead');
+    th.innerHTML='<tr>'+cot.map(c=>'<th>'+c+'</th>').join('')+'</tr>';
+    t.appendChild(th); t.appendChild(document.createElement('tbody'));
+    hop.appendChild(t);
+  }
+  const tb=t.querySelector('tbody');
+  const con=new Map([...tb.children].map(tr=>[tr.dataset.k,tr]));
+  const giu=new Set();
+  hang.forEach((h,i)=>{
+    const k=khoa(h); giu.add(k);
+    let tr=con.get(k);
+    if(!tr){ tr=document.createElement('tr'); tr.dataset.k=k; tb.appendChild(tr); }
+    const cls=lop?lop(h):'';
+    if(tr.className!==cls) tr.className=cls;
+    const o=h.o;
+    if(tr.children.length!==o.length){
+      tr.innerHTML=o.map(c=>'<td>'+c+'</td>').join('');
+    }else{
+      o.forEach((c,j)=>{ if(tr.children[j].innerHTML!==c) tr.children[j].innerHTML=c; });
+    }
+    if(tb.children[i]!==tr) tb.insertBefore(tr,tb.children[i]||null);
+  });
+  for(const [k,tr] of con) if(!giu.has(k)) tr.remove();
+}
+
+async function nap(){
+  let j;
+  try{ j=await (await fetch('/trangthai.json?t='+Date.now())).json(); }
+  catch(e){ $('#bar').className='bar chet';
+            $('#bar').innerHTML='<div class="o"><b class="d">CHƯA ĐỌC ĐƯỢC trangthai.json</b><s>bot có thể chưa chạy</s></div>'; return; }
+
+  const tuoi=(Date.now()-j.luc)/1000;
+  const chet=tuoi>30;
+
+  /* ---- thanh trạng thái ---- */
+  const kc=j.khoangChay, kcXau=kc!=null&&kc<0.40;
+  $('#bar').className='bar'+(chet?' chet':'');
+  $('#bar').innerHTML=
+    o(chet?'<span class="d">BOT CÓ THỂ ĐÃ CHẾT</span>':'<span class="x">● BOT SỐNG</span>',
+      'ảnh '+tuoi.toFixed(0)+'s trước · '+(j.wsLive?'ws ok':'WS IM'))
+   +o(j.gioVN,'giờ VN · '+j.ngay)
+   +o('<span class="l">'+j.khung+'</span>','chạy 24/24 · khung gốc đang trùng chỉ là NHÃN, không chặn lệnh')
+   +o(usd(j.von),'vốn ('+(j.von>=j.vonBanDau?'<span class="x">+':'<span class="d">')+pc((j.von-j.vonBanDau)/j.vonBanDau)+'</span>)')
+   +o(usd(j.kyQuyDung)+' <span class="du">/ '+usd(j.notional)+'</span>','ký quỹ / giá trị lệnh')
+   +o('<span class="'+(kcXau?'d':'x')+'">'+(kc==null?'—':pc(kc))+'</span>',
+      'cháy khi ngược (cần ≥'+pc(j.canChay)+')')
+   +o(j.soLenhMo+' / '+j.soCoin,'lệnh mở / coin')
+   +o('<span class="'+(j.cheDo==='giay'?'v':'d')+'">'+j.cheDo.toUpperCase()+'</span>','chế độ · ver '+j.ver)
+   +(j.choAmVon?o('<span class="'+(j.soLanChayLyThuyet?'d':'m')+'">'+(j.soLanChayLyThuyet||0)+'</span>',
+       'cháy lý thuyết · đáy '+usd(j.vonThapNhat)):'')
+   +(j.dungMoMoi?'<div class="o"><b class="d">⛔ NGỪNG MỞ LỆNH MỚI</b><s>'+(j.lyDoDung||'')+' · lệnh đang chạy KHÔNG bị đóng</s></div>':'');
+
+  /* ---- lệnh đang mở ---- */
+  const hl=$('#hopLenh');
+  if(!j.lenhMo.length){
+    if(!hl.dataset.trong){ hl.dataset.trong='1'; hl.innerHTML='<div class="trong">chưa có lệnh nào đang mở</div>'; }
+  }else{
+    if(hl.dataset.trong){ delete hl.dataset.trong; hl.innerHTML=''; }
+    veBang(hl,
+      ['Coin','Hướng','T.thái','Giá h.tại','Giá vào TB','Cắt lỗ','Lỗ/lãi','Đỉnh lãi','Hồi lại','Rào chắn','Phí+trượt','PnL ròng','Tuổi','T/B','Lời/lỗ coin','Lệnh cuối','Cảnh báo'],
+      j.lenhMo.map(L=>{
+        const dinh=(L.dinhLai||0)*100, hoi=L.hoiLai||0, ng=L.nguongHoi||0;
+        const sanBaoDong = L.baoDong && ng>0;
+        return {k:L.sym,huong:L.huong,o:[
+          '🔒 <b>'+L.sym+'</b> <span class="du">'+L.setup+(L.soLanDCA?' ·DCA':'')+'</span>',
+          L.huong==='short'?'<span class="d">🔴 SHORT</span>':'<span class="x">🟢 LONG</span>',
+          L.trangThai,
+          fg(L.giaHT),
+          fg(L.giaVaoTB)+'<span class="du"> '+usd(L.notional)+'</span>',
+          '<span class="d">'+fg(L.giaCat)+'</span><span class="du"> −'+usd(L.catLoUsd)+'</span>',
+          /* lỗ/lãi bằng ĐÔ — đây mới là thước cắt lỗ, không phải % giá */
+          '<b class="'+mau(L.pnlUsd)+'">'+usd(L.pnlUsd)+'</b>',
+          dinh>0?'<span class="x">+'+dinh.toFixed(1)+'%</span>':'<span class="m">—</span>',
+          sanBaoDong
+            ? '<span class="'+(hoi>=ng?'d':'v')+'">'+hoi.toFixed(1)+'/'+ng.toFixed(1)+'</span>'
+            : (dinh>0?'<span class="m">'+hoi.toFixed(1)+'/'+ng.toFixed(1)+'</span>':'<span class="m">—</span>'),
+          L.raoChan==null?'<span class="m">—</span>'
+            :(L.raoChan===null||!isFinite(L.raoChan)?'<span class="x">∞</span>'
+              :'<span class="'+(L.raoChan<10?'d':(L.raoChan>=45?'x':'v'))+'">'+Math.round(L.raoChan)+'ph</span>'),
+          '<span class="d">-'+usd((L.phi||0)+(L.truot||0))+'</span>'
+            +(L.funding?'<span class="du"> f'+(L.funding>=0?'+':'')+usd(L.funding)+'</span>':''),
+          '<b class="'+mau(L.pnlUsd)+'">'+usd(L.pnlUsd)+'</b><span class="du"> '+pc(L.pnlPcGia)+'</span>',
+          L.tuoiPhut>=60?(L.tuoiPhut/60).toFixed(1)+'g':L.tuoiPhut+'ph',
+          ...oDiem(L.diem),
+          (L.canhBao||[]).map(c=>'<span class="cb">⚠ '+c+'</span>').join('')||'<span class="m">—</span>',
+        ]};
+      }), h=>h.k, h=>h.huong);
+  }
+
+  /* ---- đang theo dõi ---- */
+  const ht=$('#hopTheoDoi');
+  if(!j.theoDoi.length){
+    if(!ht.dataset.trong){ ht.dataset.trong='1'; ht.innerHTML='<div class="trong">chưa theo dõi coin nào</div>'; }
+  }else{
+    if(ht.dataset.trong){ delete ht.dataset.trong; ht.innerHTML=''; }
+    veBang(ht,
+      ['Coin','Giá','%24h','Funding','ΔOI 25′','BPR','BFR','dDBI','S','Cò','T.thái','T/B','Lời/lỗ coin','Lệnh cuối','Kế hoạch','Vì sao chưa vào'],
+      j.theoDoi.map(c=>{
+        const am=c.amMay!=null&&c.amMay<c.warmup;
+        let vs;
+        if(!c.soLive) vs='<span class="no">MẤT SỔ LỆNH</span>';
+        else if(am) vs='<span class="cho">ấm máy '+c.amMay+'/'+c.warmup+'s</span>';
+        else if(c.trangThai==='CHO_VAO') vs='<span class="ok">SẴN SÀNG — chờ cò xác nhận</span>';
+        else if(c.taiSao&&c.taiSao.length) vs=c.taiSao.map(t=>'<span class="no">⛔ '+t+'</span>').join(' ');
+        else if(c.lyDoKhung&&c.lyDoKhung.length) vs='<span class="cho">'+c.lyDoKhung[0]+'</span>';
+        else if(!c.co) vs='<span class="cho">chờ cò · BPR '+(c.bpr==null?'—':c.bpr.toFixed(2))+'</span>';
+        else vs='<span class="cho">đang đếm xác nhận '+c.demXacNhan+'/15</span>';
+
+        const kh=c.keHoach;
+        const moi=kh&&kh.capNhatLuc&&Date.now()-kh.capNhatLuc<60000;
+        const keHoach=kh
+          ? (moi?'🔄 ':'🔒 ')+'vào '+fg(kh.giaVao)+' · cắt <span class="d">'+fg(kh.giaCat)+'</span>'
+            +'<span class="du"> ('+usd(kh.kyQuy)+'×10=' +usd(kh.notional)+', −'+usd(kh.catLoUsd)+')</span>'
+          : '<span class="m">—</span>';
+
+        return {k:c.sym,huong:c.huong||'',o:[
+          '<b>'+c.sym+'</b>'+(c.khoaDen?'<span class="du"> 🔗'+c.khoaDen+'ph</span>':''),
+          fg(c.giaHT),
+          '<span class="'+mau(c.chg24)+'">'+pc(c.chg24)+'</span>',
+          c.funding8h==null?'<span class="m">—</span>'
+            :'<span class="'+(c.funding8h<0?'d':(c.funding8h>0.0005?'x':'m'))+'">'+pc2(c.funding8h)+'</span>',
+          c.dOi25==null?'<span class="m">—</span>':'<span class="'+mau(c.dOi25)+'">'+pc(c.dOi25)+'</span>',
+          c.bpr==null?'—':'<span class="'+(c.bpr>=0.25?'v':'m')+'">'+c.bpr.toFixed(2)+'</span>',
+          c.bfr==null?'—':'<span class="m">'+c.bfr.toFixed(2)+'</span>',
+          c.ddbi==null?'—':'<span class="'+mau(-c.ddbi)+'">'+c.ddbi.toFixed(2)+'</span>',
+          c.s==null?'—':'<b class="'+mau(c.s)+'">'+c.s.toFixed(0)+'</b>',
+          c.co?(c.co==='SHORT'?'<span class="d">🔴</span>':'<span class="x">🟢</span>'):'<span class="m">·</span>',
+          c.trangThai,
+          ...oDiem(c.diem),
+          keHoach,
+          vs,
+        ]};
+      }), h=>h.k, h=>h.huong);
+  }
+
+  /* ---- lịch sử ---- */
+  const hs=$('#hopLichSu');
+  if(j.lichSu.length){
+    const n=j.lichSu.length;
+    const t=j.lichSu.filter(h=>h.pnl>0).length;
+    const tien=j.lichSu.reduce((a,h)=>a+(h.pnl||0),0);
+    const tongR=j.lichSu.reduce((a,h)=>a+(h.R||0),0);
+    const phi=j.lichSu.reduce((a,h)=>a+(h.phi||0)+(h.truot||0),0);
+    const fd=j.lichSu.reduce((a,h)=>a+(h.funding||0),0);
+    $('#tomTat').innerHTML=
+      '<span class="du">'+n+' lệnh · </span><span class="x">'+t+' thắng</span>'
+      +'<span class="du"> / </span><span class="d">'+(n-t)+' thua</span>'
+      +'<span class="du"> · lời/lỗ </span><b class="'+mau(tien)+'">'+usd(tien)+'</b>'
+      +'<span class="du"> · tổng </span><b class="'+mau(tongR)+'">'+tongR.toFixed(2)+'R</b>'
+      +'<span class="du"> · phí+trượt −'+usd(phi)+' · funding '+(fd>=0?'+':'')+usd(fd)+'</span>';
+  } else $('#tomTat').innerHTML='';
+  if(!j.lichSu.length){
+    if(!hs.dataset.trong){ hs.dataset.trong='1'; hs.innerHTML='<div class="trong">chưa có lệnh nào đóng</div>'; }
+  }else{
+    if(hs.dataset.trong){ delete hs.dataset.trong; hs.innerHTML=''; }
+    veBang(hs,['Coin','Hướng','Setup','Giờ vào','Giá vào','Giờ đóng','Giá đóng','Lý do','Đỉnh lãi','Hồi','DCA','Ôm','Phí+trượt','Lời/lỗ','R'],
+      j.lichSu.map(h=>({k:h.sym+h.tsDong,huong:h.huong,o:[
+        '<b>'+h.sym+'</b>',
+        h.huong==='short'?'<span class="d">SHORT</span>':'<span class="x">LONG</span>',
+        '<span class="du">'+h.setup+'</span>',
+        '<span class="l">'+(gioVN(h.tsMo)||'—')+'</span>',
+        fg(h.giaVao),
+        '<span class="l">'+(gioVN(h.tsDong)||'—')+'</span>',
+        fg(h.giaDong),
+        '<span class="'+(/cat_lo/.test(h.lyDo)?'d':'m')+'">'+h.lyDo+'</span>',
+        (h.dinhLai>0?'<span class="x">+'+(h.dinhLai*100).toFixed(1)+'%</span>':'<span class="m">—</span>'),
+        (h.hoiLai?h.hoiLai.toFixed(1):'<span class="m">—</span>'),
+        (h.soLanDCA?'<span class="v">'+h.soLanDCA+'</span>':'<span class="m">0</span>'),
+        (h.phutOm>=60?(h.phutOm/60).toFixed(1)+'g':(h.phutOm||0)+'ph'),
+        '<span class="d">-'+usd((h.phi||0)+(h.truot||0))+'</span>',
+        '<b class="'+mau(h.pnl)+'">'+usd(h.pnl)+'</b>',
+        '<span class="'+mau(h.R)+'">'+h.R.toFixed(2)+'R</span>',
+      ]})), h=>h.k, h=>h.huong);
+  }
+}
+function o(b,s){ return '<div class="o"><b>'+b+'</b><s>'+s+'</s></div>'; }
+
+/* giờ VN HH:mm từ mốc thời gian */
+function gioVN(ts){
+  if(!ts) return null;
+  const d=new Date(ts+7*3600e3);
+  return String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');
+}
+/* bảng điểm của một coin → 3 ô: thắng/thua · tiền · giờ lệnh gần nhất */
+function oDiem(d){
+  if(!d || (!d.thang && !d.thua)) return ['<span class="m">—</span>','<span class="m">—</span>','<span class="m">—</span>'];
+  const g=gioVN(d.lanCuoi);
+  return [
+    '<span class="x">'+d.thang+'</span><span class="m">/</span><span class="d">'+d.thua+'</span>',
+    '<b class="'+mau(d.pnl)+'">'+usd(d.pnl)+'</b>',
+    g?'<span class="du">'+g+'</span>':'<span class="m">—</span>',
+  ];
+}
+
+nap(); setInterval(nap, 2000);
+</script>
