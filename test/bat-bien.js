@@ -511,6 +511,11 @@ nhom('⭐ GIAI ĐOẠN 10 — CẮT LỖ PHÍA SÀN (cấu hình + quét mã ngu
      lên để đo. Thà lệch và kêu to còn hơn ghi một con số sai. */
   kiem('⛔ đối soát định kỳ CHỈ cảnh báo, KHÔNG tự đóng sổ sách',
     !/doiSoatDinhKy[\s\S]{0,1600}?_dong\(/.test(srcB));
+  /* ⛔ Máy trạng thái đã có `TT.SAN` nghĩa là "sẵn sàng, đứng ngoài".
+     Ghi sự kiện sàn cũng bằng nhãn `SAN` thì hai thứ khác hẳn nhau dồn
+     chung một chỗ, không tách được khi đọc DB — đã dính đúng lỗi này. */
+  kiem('⛔ nhãn sự kiện sàn KHÔNG trùng tên trạng thái máy trạng thái',
+    !/tu:\s*'SAN'/.test(srcSan) && /SAN_OKX/.test(srcSan));
   kiem('San.laThat() sai ở chế độ giay', San.laThat() === false);
   kiem('chưa nạp khoá thì okx-tt báo chưa sẵn sàng', TT10.daNapKhoa() === false);
 }

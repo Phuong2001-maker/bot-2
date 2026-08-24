@@ -26,7 +26,7 @@ Trong repo này bạn là **Kiến trúc sư Hệ thống kiêm Quant giao dịc
 npm test
 ```
 
-316 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
+317 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
 Nếu test đỏ vì bạn cố ý đổi hành vi thì phải **sửa test và giải thích tại sao test cũ sai** — không được xoá test cho qua.
 
 **2. Cập nhật file này NGAY trong cùng lượt làm việc, trước khi báo hoàn thành.**
@@ -111,7 +111,7 @@ Những điều này là **quyết định của chủ dự án**, không phải
 | Tên miền | `k7m2coin.hiteckqualityconstruction.com.au` → `103.75.186.15` |
 | Đã chạy thật | 11,3 ngày liên tục, 20 coin, **54 lệnh**, 311.513 nhịp. RAM **357,68 MB** trên trần tài khoản **2 GB** (đo 23/08 ở bảng điều khiển hosting) → ~15 MB/coin |
 | Giờ giấc | **24/24 tuyệt đối** — không còn cổng giờ nào, kể cả vùng cấm |
-| Test | **316/316 đạt** |
+| Test | **317/317 đạt** |
 | Coin theo dõi | **động** — kết quả của `LOC_COIN`, không phải số đặt trước. Đo thật 12/08: 427 SWAP → 50 qua thanh khoản → **6 qua lọc xu hướng**; 27 coin bị loại vì đi ngang |
 | Trần coin | **BỎ** (`SO_COIN_TRAN: null`) — thay bằng **trần RAM** 1000/1200 MB trên máy 2 GB. ⚠ Nhưng ràng buộc thật là **bộ lọc xu hướng** (`loc=11/20`), không phải trần: bỏ trần chỉ đưa lên ~15–25 coin |
 | Lệnh mở tối đa | **BỎ** (`SO_LENH_MO_TOI_DA: null`) — thay bằng **ngân sách rủi ro** `TRAN_RUI_RO.TONG_PC = 30%` vốn (= đúng ngân sách cũ 3 × $20) |
@@ -244,6 +244,7 @@ Cò SHORT cần đủ **cả bốn**: `BPR ≥ 0,25` · `BPR ≥ 2×BFR` · `dDB
 | Trượt giá tính hai lần | `_khop()` trả về **giá đã xấu đi**, nên trượt tự nằm trong PnL. `truot_usd` **chỉ để báo cáo**. Chỉ **phí** mới trừ tường minh |
 | Hai bot chạy cùng lúc = hai tiến trình ghi một DB | `EADDRINUSE` đã có thông báo rõ + thoát sạch |
 | **Sổ lệnh chết → lệnh đang mở bị bỏ rơi** | Vòng lặp 2 giây có ba lối `continue` (quá 20s không có gói · `E.so.hong` · sổ rỗng một phía) nằm **trước** `QL.capNhat()`, nên bỏ qua luôn cả lệnh đang mở. Đo thật: **19/08 01:35→01:40, 6 phút, 20/20 coin mất sổ, WS im, 3 lệnh đang mở** — vốn đứng nguyên $178,12 và bộ đếm ghi đứng nguyên 770236, tức `capNhat()` không chạy lần nào. Cộng **10.333 lần** `so lenh hong` (đồng bộ định kỳ 30 phút × 20 coin × 11 ngày). Đường cắt 33% cũ **che** cho lỗ hổng này; đường cắt 3–8% thì không. Nay có nhánh **canh mù** bằng giá REST |
+| **Nhãn sự kiện trùng tên trạng thái** | `lib/san.js` ghi sự kiện sàn với `tu: 'SAN'`, mà máy trạng thái đã có sẵn `TT.SAN` nghĩa là "sẵn sàng, đứng ngoài". Hai thứ khác hẳn nhau dồn chung một nhãn → truy vấn `WHERE tu='SAN'` ra toàn chuyển trạng thái, không thấy sự kiện SL nào. Dính ngay lần truy vấn đầu tiên. Nay là `SAN_OKX`, có phép kiểm chặn tái diễn |
 | **Hàm băm phiên bản tự nhận là đầy đủ nhưng bỏ sót nhóm quan trọng nhất** | `verTrongSo` có chú thích *"tự sinh từ chính mảng tham số quyết định → không bao giờ quên bump phiên bản"*, nhưng **không hề băm nhóm `SETUP`** — tức toàn bộ điều kiện VÀO LỆNH. Hạ ngưỡng SHORT-A từ 30%/0,05% xuống 20%/0,02% mà băm **đứng im**, DB không tách được hai đợt dữ liệu. ⛔ Đừng tin chú thích — **kiểm bằng hành vi**: đổi từng nhóm tham số rồi khẳng định băm phải đổi |
 | **Điều kiện setup "hợp lý" nhưng GIAO của chúng gần như rỗng** | SHORT-A đòi `chg24 ≥ 30%` **và** `funding ≥ 0,05%`. Đo riêng: 4,25% và 4,94% số nhịp — cả hai đều không hiếm. Đo **giao**: **0,22%**, qua cả 4 vế còn **0,13%** → 11,3 ngày ra đúng **1 lệnh short**. Hai điều kiện gần như loại trừ nhau: coin pump mạnh thì funding thấp, coin funding cao thì không pump. ⛔ Đừng đánh giá điều kiện setup bằng cách đọc từng vế — phải **đo giao** |
 | **Ngưỡng đặt cạnh mức nền của thị trường** | 41% số nhịp có funding 0,01–0,02% — đó là mức nền OKX. Ngưỡng 0,05% là **5 lần mức nền** nên gần như không chạm; nhưng hạ xuống 0,01% thì vế funding **ngừng lọc gì cả** (nhảy 20,8×, từ 5 lên 27 coin). Ngưỡng phải đặt theo **bội số của mức nền**, không phải theo con số tròn |
