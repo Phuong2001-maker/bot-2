@@ -33,4 +33,27 @@ module.exports = {
      Trên server thì để `false` — Apache/nginx đã phục vụ thư mục gốc web
      rồi, bật thêm chỉ chiếm cổng vô ích. */
   BAT_WEB_NOI_BO: true,
+
+  /* ============ KHOÁ API OKX — Giai đoạn 10 ============
+     ⛔ CHỈ CẦN khi `CHE_DO` trong config.js là 'demo' hoặc 'that'.
+     Ở chế độ 'giay' (mặc định) bot chạy bình thường mà KHÔNG cần khoá —
+     nó vẫn tính đủ lệnh SL sẽ gửi và ghi lại để bạn soi trước.
+
+     ⭐ LỘ TRÌNH AN TOÀN, ĐỪNG NHẢY CÓC:
+       1. 'giay'  → xem sự kiện SL_KHO trong bảng `su_kien`, kiểm giá kích
+                    hoạt có đúng đường cắt không
+       2. 'demo'  → tạo khoá ở mục DEMO TRADING của OKX (khoá riêng, KHÔNG
+                    dùng chung với tài khoản thật). Tiền ảo, đường code
+                    thật. Chạy tới khi đối soát sạch.
+       3. 'that'  → chỉ sau ≥200 lệnh giấy và khi bước 2 không còn lệch.
+
+     ⛔ QUYỀN CỦA KHOÁ: chỉ bật **Trade**. TUYỆT ĐỐI KHÔNG bật Withdraw.
+        Có giới hạn IP về đúng IP server.
+     ⛔ Khoá nằm trong file này — file đã ở .gitignore. Đừng commit, đừng
+        dán vào chat, đừng chụp màn hình.                                */
+  // OKX: {
+  //   apiKey: '',
+  //   apiSecret: '',
+  //   passphrase: '',
+  // },
 };

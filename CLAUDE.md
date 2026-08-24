@@ -26,7 +26,7 @@ Trong repo này bạn là **Kiến trúc sư Hệ thống kiêm Quant giao dịc
 npm test
 ```
 
-263 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
+304 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
 Nếu test đỏ vì bạn cố ý đổi hành vi thì phải **sửa test và giải thích tại sao test cũ sai** — không được xoá test cho qua.
 
 **2. Cập nhật file này NGAY trong cùng lượt làm việc, trước khi báo hoàn thành.**
@@ -55,6 +55,18 @@ Những điều này là **quyết định của chủ dự án**, không phải
   ⛔ **Sổ lệnh hỏng được phép chặn MỞ lệnh mới. KHÔNG BAO GIỜ được chặn ĐÓNG lệnh.** Mất sổ thì lệnh đang mở chuyển sang **canh mù** bằng giá REST (`canhLenhMu`) — vẫn kiểm đường cắt, vẫn kiểm van cuối. Mất cả sổ lẫn ticker thì **kêu to**, không đoán giá.
 
   **Không đóng vì:** hết giờ · cấu trúc gãy · funding đảo · `S` đổi dấu · ra khỏi khung giờ. Những thứ đó **chỉ được vẽ ⚠**. Thấy `_dong()` thứ tư trong `_xuLyDCA` hay `_canhBao` là LỖI.
+
+**1bis. ⭐ CẮT LỖ PHẢI CÓ MẶT Ở PHÍA SÀN (Giai đoạn 10).** Đường cắt trong RAM có ba tầng trễ không gỡ được bằng code: nhịp 2 giây · Node đơn luồng (20 lệnh cùng chạm cắt thì lệnh cuối chờ lệnh đầu) · bot chết thì không ai cắt. SL đặt trên sàn canh ở mức micro-giây, song song, và sống độc lập với bot.
+
+  ⛔ SL phải là lệnh **THỊ TRƯỜNG** (`slOrdPx: '-1'`) và **giảm vị thế**. Lệnh giới hạn có thể trượt qua mà không khớp — một SL không khớp còn **tệ hơn không có SL**, vì ta tưởng mình đang được bảo vệ.
+
+  ⛔ Ba thời điểm bắt buộc: mở lệnh → **đặt**, đường cắt siết → **dời**, đóng lệnh → **huỷ**. Quên huỷ là SL mồ côi nằm lại, lần sau vào cùng coin nó cắt nhầm vị thế mới.
+
+  ⛔ Lời gọi sàn **KHÔNG được `await` trong vòng lặp 2 giây** — một API chậm kéo lùi việc quản lý mọi coin khác. Đường cắt RAM vẫn canh song song, nên SL sàn là lớp **cộng thêm**, không phải lớp thay thế.
+
+**1ter. ⭐ ĐỐI SOÁT TRƯỚC KHI BẬT NHỊP.** Bot khởi động lại phải nạp lại lệnh đang mở từ DB (và hỏi sàn nếu chạy thật) **trước** khi cho nhịp phân tích chạy. Bỏ bước này là bot không biết mình đang có vị thế → mở lệnh trùng, và lệnh cũ kẹt vĩnh viễn với `ts_dong = NULL`.
+
+  Đường cắt phục hồi **đúng mốc chặt nhất từng đạt** — `gia_cat` ghi mỗi 2 giây và chỉ siết vào, nên nạp lại là chính xác tuyệt đối. `baoDong` **không** khôi phục (chỉ có trong RAM) → về `false`, phía an toàn.
 
 **2. TIỀN TÍNH BẰNG ĐÔ, KHÔNG PHẢI %.** Vốn $200 · vào **$6×10** · DCA **$4×10** · **DCA ĐÚNG MỘT LẦN**. Size không co giãn theo vốn → vốn về 0 hay âm cũng không hỏng công thức.
 
@@ -99,7 +111,7 @@ Những điều này là **quyết định của chủ dự án**, không phải
 | Tên miền | `k7m2coin.hiteckqualityconstruction.com.au` → `103.75.186.15` |
 | Đã chạy thật | 11,3 ngày liên tục, 20 coin, **54 lệnh**, 311.513 nhịp. RAM **357,68 MB** trên trần tài khoản **2 GB** (đo 23/08 ở bảng điều khiển hosting) → ~15 MB/coin |
 | Giờ giấc | **24/24 tuyệt đối** — không còn cổng giờ nào, kể cả vùng cấm |
-| Test | **263/263 đạt** |
+| Test | **304/304 đạt** |
 | Coin theo dõi | **động** — kết quả của `LOC_COIN`, không phải số đặt trước. Đo thật 12/08: 427 SWAP → 50 qua thanh khoản → **6 qua lọc xu hướng**; 27 coin bị loại vì đi ngang |
 | Trần coin | **BỎ** (`SO_COIN_TRAN: null`) — thay bằng **trần RAM** 1000/1200 MB trên máy 2 GB. ⚠ Nhưng ràng buộc thật là **bộ lọc xu hướng** (`loc=11/20`), không phải trần: bỏ trần chỉ đưa lên ~15–25 coin |
 | Lệnh mở tối đa | **BỎ** (`SO_LENH_MO_TOI_DA: null`) — thay bằng **ngân sách rủi ro** `TRAN_RUI_RO.TONG_PC = 30%` vốn (= đúng ngân sách cũ 3 × $20) |
@@ -128,6 +140,8 @@ config.js            MỌI tham số quyết định. Không rải hằng số t
 lib/
   tuong.js      ⭐   wallBook · wallTrust · BPR/BFR · raoChan() — LÕI, lọc lệnh ảo
   lenh.js       ⭐   máy trạng thái · tiền tính bằng ĐÔ · _khop() · 3 đường ra
+  san.js        ⭐   bộ chuyển sàn: giay | demo | that — MỘT đường code
+  okx-tt.js          OKX riêng tư (ký HMAC) · đặt/sửa/huỷ SL · đọc vị thế
   tinhieu.js         6 tín hiệu · điểm S · 3 cò · bitmask chan
   okx-ws.js          WebSocket · sổ lệnh · tách lastData/lastMsg
   okx-rest.js        ticker · funding · nến · ctVal · listTime
@@ -230,6 +244,8 @@ Cò SHORT cần đủ **cả bốn**: `BPR ≥ 0,25` · `BPR ≥ 2×BFR` · `dDB
 | Trượt giá tính hai lần | `_khop()` trả về **giá đã xấu đi**, nên trượt tự nằm trong PnL. `truot_usd` **chỉ để báo cáo**. Chỉ **phí** mới trừ tường minh |
 | Hai bot chạy cùng lúc = hai tiến trình ghi một DB | `EADDRINUSE` đã có thông báo rõ + thoát sạch |
 | **Sổ lệnh chết → lệnh đang mở bị bỏ rơi** | Vòng lặp 2 giây có ba lối `continue` (quá 20s không có gói · `E.so.hong` · sổ rỗng một phía) nằm **trước** `QL.capNhat()`, nên bỏ qua luôn cả lệnh đang mở. Đo thật: **19/08 01:35→01:40, 6 phút, 20/20 coin mất sổ, WS im, 3 lệnh đang mở** — vốn đứng nguyên $178,12 và bộ đếm ghi đứng nguyên 770236, tức `capNhat()` không chạy lần nào. Cộng **10.333 lần** `so lenh hong` (đồng bộ định kỳ 30 phút × 20 coin × 11 ngày). Đường cắt 33% cũ **che** cho lỗ hổng này; đường cắt 3–8% thì không. Nay có nhánh **canh mù** bằng giá REST |
+| **Điều kiện setup "hợp lý" nhưng GIAO của chúng gần như rỗng** | SHORT-A đòi `chg24 ≥ 30%` **và** `funding ≥ 0,05%`. Đo riêng: 4,25% và 4,94% số nhịp — cả hai đều không hiếm. Đo **giao**: **0,22%**, qua cả 4 vế còn **0,13%** → 11,3 ngày ra đúng **1 lệnh short**. Hai điều kiện gần như loại trừ nhau: coin pump mạnh thì funding thấp, coin funding cao thì không pump. ⛔ Đừng đánh giá điều kiện setup bằng cách đọc từng vế — phải **đo giao** |
+| **Ngưỡng đặt cạnh mức nền của thị trường** | 41% số nhịp có funding 0,01–0,02% — đó là mức nền OKX. Ngưỡng 0,05% là **5 lần mức nền** nên gần như không chạm; nhưng hạ xuống 0,01% thì vế funding **ngừng lọc gì cả** (nhảy 20,8×, từ 5 lên 27 coin). Ngưỡng phải đặt theo **bội số của mức nền**, không phải theo con số tròn |
 | **Siết cắt lỗ mà quên các ngưỡng ĐO BẰNG ĐÔ ăn theo nó** | Cửa sổ DCA `[$4,$10]` hợp lý khi mức cắt luôn là $20. Khi đường cắt còn $1,80–$4,80 thì cửa sổ đó nằm **ngoài tầm với** → DCA **chết âm thầm**, không lỗi, không log. Nay đo bằng **tỷ lệ** trên rủi ro thiết kế. Đổi mức cắt thì phải rà **mọi** hằng số đô ăn theo: cửa sổ DCA · `RAO_CHAN_TOI_THIEU` · mẫu số R · cổng thanh lý |
 
 ---
@@ -238,7 +254,7 @@ Cò SHORT cần đủ **cả bốn**: `BPR ≥ 0,25` · `BPR ≥ 2×BFR` · `dDB
 
 0. ✅ ~~Đưa bot lên server~~ — **XONG 2026-08-12**. Chạy tại `~/bot-coin`, web ở `k7m2coin.hiteckqualityconstruction.com.au`, cron mỗi phút.
 1. **Để bot chạy giấy vài ngày** qua vài khung giờ đêm → có lệnh thật để đọc. **Đây là việc quan trọng nhất**, không phải viết thêm code.
-2. **Giai đoạn 10 — đặt lệnh thật OKX.** Chỉ sau **≥200 lệnh giấy**. Cần: API key **chỉ quyền Trade, KHÔNG bật Withdraw**, có giới hạn IP · cắt lỗ `trigger` **phía sàn** (cắt lỗ nằm trong RAM bot thì bot chết = không có cắt lỗ) · đối soát số dư.
+2. ⏳ **Giai đoạn 10 — KHUNG ĐÃ XONG 2026-08-24** (`lib/san.js` · `lib/okx-tt.js` · đối soát · SL phía sàn), đang khoá ở chế độ `giay`. Còn lại: nghe kênh `orders` riêng tư qua WS để biết NGAY lúc SL khớp kèm giá + phí thật (hiện chỉ đối soát 5 phút/lần và cảnh báo). ⛔ Bật `demo` khi có khoá demo; bật `that` chỉ sau **≥200 lệnh giấy**. Cần: API key **chỉ quyền Trade, KHÔNG bật Withdraw**, có giới hạn IP · cắt lỗ `trigger` **phía sàn** (cắt lỗ nằm trong RAM bot thì bot chết = không có cắt lỗ) · đối soát số dư.
 3. **Trang báo cáo web** thay cho terminal.
 
 **Chưa được làm:** chỉnh trọng số `S` (chưa đủ mẫu) · thêm sàn khác (chưa cần) · thêm tín hiệu mới (đa kiểm định — 15 tín hiệu × nhiều coin × nhiều tham số là >300 phép thử, ở p<0,05 sẽ có ~15 tín hiệu "chạy được" hoàn toàn do may rủi).
@@ -282,6 +298,16 @@ ALTER TABLE tin_hieu
   ADD COLUMN co_short TINYINT, ADD COLUMN co_long TINYINT;
 ```
 
+**Thêm 2026-08-24** — hai cột của SL phía sàn (Giai đoạn 10):
+
+```sql
+ALTER TABLE lenh
+  ADD COLUMN sl_algo_id VARCHAR(48),
+  ADD COLUMN sl_gia VARCHAR(48);
+```
+
+Thiếu chúng thì bot **không đối soát được SL của mình** sau khi khởi động lại.
+
 **Thêm 2026-08-23** — hai cột của đường cắt trailing:
 
 ```sql
@@ -311,6 +337,8 @@ Mỗi lần sửa code phải thêm một dòng ở đây, **trong cùng lượt
 
 | Ngày | Việc | Lý do |
 |---|---|---|
+| 2026-08-24 | ⭐⭐ **GIAI ĐOẠN 10 — cắt lỗ phía sàn + đối soát khởi động (logic đầy đủ, vẫn khoá ở chế độ giấy)** | Chủ dự án hỏi đúng chỗ yếu: *"biến động mạnh chỉ trong chớp mắt là bị cắt, nhiều lệnh như thế bạn có kịp cắt không"* — rồi tự đề xuất đặt SL phía sàn. Đúng, và đó là cách DUY NHẤT xử lý được **ba tầng trễ**: (1) nhịp 2 giây — và bản trailing 3–8% **nhạy cảm hơn hẳn** bản cắt $20 (=33% giá), vì một cú 2 giây khó đi hết 33% nhưng đi hết 3% là bình thường; (2) Node đơn luồng — 20 lệnh cùng chạm cắt thì lệnh cuối chờ lệnh đầu; (3) bot chết thì không ai cắt. **Kiến trúc: BA CHẾ ĐỘ, MỘT ĐƯỜNG CODE** — `giay` (mặc định, không cần khoá, vẫn TÍNH đủ lệnh SL rồi ghi `SL_KHO` vào `su_kien` để soi trước) → `demo` (API OKX thật + header `x-simulated-trading`, tiền ảo hạ tầng thật) → `that` (bỏ đúng header đó). Nhờ vậy `giay` không phải nhánh code chết và sang thật không có đoạn nào "lần đầu được chạy". **File mới:** `lib/okx-tt.js` (ký HMAC + endpoint riêng tư) · `lib/san.js` (bộ chuyển). **Quyết định thiết kế:** SL kiểu **thị trường** `slOrdPx:'-1'` chứ không giới hạn — SL không khớp còn tệ hơn không có SL; **vùng chết 0,3%** chống spam sửa lệnh (đường cắt siết mỗi 2 giây × 20 vị thế = 10 yêu cầu/giây, đụng giới hạn tốc độ API đúng lúc thị trường loạn); gọi sàn **không `await`** trong vòng lặp. **Vá luôn lỗi ① (mức Cao):** `napLaiLenhMo()` dựng lại lệnh đang mở từ DB lúc khởi động — khôi phục được từ **cột đã có**, vì `gia_cat` ghi mỗi 2 giây và chỉ siết vào nên nạp lại mốc chặt nhất là chính xác tuyệt đối; `giaDinh` suy ngược từ `gia_cat`/`khoang_trailing`, `daKhoaVon` suy từ điểm hoà vốn, `baoDong` về `false` (phía an toàn). Kèm `napLaiVon()` dựng vốn từ tổng PnL đã đóng thay vì đặt về $200 mỗi lần restart. **Đối soát** chạy TRƯỚC khi bật nhịp, và định kỳ 5 phút ở chế độ thật để bắt lúc SL sàn đã khớp — ⛔ **chỉ cảnh báo, không tự đóng sổ sách**, vì đóng bằng giá đoán sẽ làm hỏng chính bộ dữ liệu dự án dựng lên để đo. Thêm 2 cột `sl_algo_id` · `sl_gia`. **304/304 đạt** (trước 271) |
+| 2026-08-24 | ⭐ **MỞ KHOÁ LỆNH SHORT + trần theo hướng + gỡ số cứng 0.30** | Chủ dự án chốt: bot phải có lệnh short mà vẫn an toàn. Đo trên **311.513 nhịp** để tìm ĐÚNG chỗ nghẽn — và nó **không phải** ngưỡng `chg24 ≥ 30%` như tưởng: `chg24 ≥ 30%` đạt **13.241 nhịp (4,25%)**, `funding ≥ 0,05%` đạt **15.380 nhịp (4,94%)**, nhưng **GIAO của hai vế chỉ 686 nhịp (0,22%)**, qua cả 4 vế còn **395 nhịp trên 3 coin** → 11,3 ngày ra đúng 1 lệnh short. Hai điều kiện **gần như loại trừ nhau**. Nguyên nhân sâu hơn: **41% số nhịp có funding 0,01–0,02%** = mức nền OKX, nên 0,05% là 5 lần mức nền. **Sửa:** `SHORT-A.chg24Min` 0,30→**0,20**, `fundingMin` 0,0005→**0,0002** (cả SHORT-A và SHORT-B) → **1.659 nhịp, gấp 4,2×**, vẫn chỉ 5 coin nên vẫn chọn lọc. ⛔ **KHÔNG** hạ funding xuống 0,01% dù bảng đo cho 20,8×: đó là mức nền, hạ tới đó là vế funding ngừng lọc và giả thiết "long chen chúc" tan — biến SHORT-A thành "short bất cứ thứ gì vừa pump". Giữ **nguyên 100%** mọi chốt chặn squeeze (funding âm → chặn, OI giảm khi giá tăng → chặn), và SHORT vẫn khắt khe hơn LONG-A (20% so với 10–15%). **An toàn kèm theo:** cảnh báo `TAP TRUNG` nâng thành **cổng thật** `TRAN_CUNG_HUONG_PC = 0,70` — không hướng nào được chiếm quá $42 trong $60, luôn chừa chỗ cho hướng kia; hôm nay không chặn gì vì long đang dùng ~40%. **Vá kèm:** `bot.js` có **số cứng `0.30`** quyết định `da_tang30_hom_qua` — vi phạm quy tắc #4 và nhóm phép kiểm SỐ CỨNG đã để lọt suốt. Cột này là **cổng hai chiều** (SHORT-B cần TRUE, LONG-B bị chặn nếu TRUE) nên một con số lạc trong bot.js đang âm thầm điều khiển hai setup; nay là `QUET.MOC_PUMP_LON`, khoá bằng phép kiểm phải khớp `SHORT-A.chg24Min`. **271/271 đạt** (trước 263) |
 | 2026-08-23 | 🔧 **Hạ trần RAM 1200/1350 → 1000/1200 sau khi ĐO server thật** | Chủ dự án đưa ảnh bảng điều khiển hosting: trần tài khoản **2 GB** (CloudLinux LVE), bot đang dùng **357,68 MB** ở 20 coin → **~15 MB/coin** + nền Node ~60 MB. Con số 1200/1350 đặt trước đó là **đoán khi chưa biết RAM server**, chỉ chừa 700 MB đệm — quá mỏng cho hosting chia sẻ, nơi chạm trần là bị **giết thẳng, không swap, không ân hạn**, trong khi Node dọn rác lười nên RSS vọt lên trước khi GC chạy. Bot chết = **không ai canh lệnh đang mở**, đúng lỗ hổng vừa vá. Nay 1000/1200 ≈ 63 coin, chừa hơn 1 GB đệm. Thêm `RAM_MAY_CHU_MB: 2048` để **khai báo** RAM máy chủ thay vì để code đoán, kèm phép kiểm bắt mức xả ≤ 65% RAM máy chủ — lần sau ai nâng trần cho "theo dõi nhiều coin hơn" sẽ bị chặn. ⚠ Ghi nhận kèm: RAM **sẽ không chạm trần** trong thực tế — log cho thấy `loc=11/20`, tức **bộ lọc xu hướng** mới là thứ quyết định số coin (10–13), không phải trần. Bỏ trần đếm 20 chỉ đưa lên ~15–25 coin ≈ 400–450 MB; thứ thật sự mở khoá cơ hội là bỏ **trần lệnh**, không phải trần coin. Đo thêm từ bảng điều khiển: CPU 10,46/200 · đĩa 230 MB/10 GB · processes 11/100 — **RAM là ràng buộc duy nhất**. ⚠ Đĩa: bảng `nhip` không có cơ chế xoá cũ, tích ~610 MB/tháng ở 20 coin → 10 GB đầy sau ~16 tháng. **263/263 đạt** |
 | 2026-08-23 | ⭐ **BỎ TRẦN ĐẾM ở CẢ HAI cần gạt — thay bằng RỦI RO và RAM** | Chủ dự án chốt: trần hiện tại đang **cắt mất cơ hội có lãi**. Đo thật khớp: trần 3 lệnh khoá bot **29,3% thời gian**, và **37/71** lần vào SẴN_SÀNG không bao giờ mở được lệnh. **Lệnh mở:** `SO_LENH_MO_TOI_DA` 3 → `null`, thay bằng `TRAN_RUI_RO.TONG_PC = 30%` vốn — **đúng bằng ngân sách cũ** (3 × $20 / $200). Vì đường cắt trailing chỉ 3–8% nên rủi ro mỗi lệnh còn $1,80–$4,80: cùng số tiền đó nay mua được **12–33 lệnh thay vì 3**. Ngân sách đo bằng **rủi ro CÒN LẠI** (PnL tại đường cắt), không phải rủi ro lúc mở → lệnh **đã khoá hoà vốn chiếm 0 ngân sách** và trả lại chỗ. ⚠ Trần rủi ro **không** bắt được tương quan (53/54 lệnh là LONG) nên thêm cảnh báo `TAP TRUNG LONG/SHORT` — chỉ kêu, không chặn. **Coin theo dõi:** `SO_COIN_TRAN` 20 → `null`, thay bằng `RAM_TRAN_MB` — RAM mới là thứ việc theo dõi thêm coin thật sự tiêu. Vượt `RAM_XA_BOT_MB` thì **gỡ bớt** coin chứ không chỉ ngừng thêm, vì bot bị OOM kill là **không ai canh lệnh đang mở** (đúng lỗ hổng vừa vá). Coin đang có lệnh mở vẫn miễn nhiễm khỏi việc gỡ. ⚠ `RAM_TRAN_MB = 1200` là **ước lượng** từ mốc đo 20 coin → 380MB (~19MB/coin); **phải kiểm `free -m` trên server rồi chỉnh**. Kèm theo, làm nốt việc đã treo từ đầu: **mọi lối chặn mở lệnh nay đều ghi sự kiện** (`chan_ngat_mach` · `chan_tran_dem_lenh` · `chan_tran_rui_ro` · `chan_cong_thanh_ly`) — trước đây hai lối đầu là `return` trần, không log, không dấu vết, nên DB không giải thích nổi vì sao 37 lần SẴN_SÀNG không vào được lệnh. **261/261 đạt** (trước 244) |
 | 2026-08-23 | ⛔ **VÁ LỖ HỔNG: sổ lệnh chết thì lệnh đang mở KHÔNG AI CANH** | Chủ dự án hỏi đúng chỗ: *"một ngày nào đó coin nào đó ngược hướng nó lại thanh lý tài khoản"*. Truy ra `bot.js` có **ba lệnh `continue`** nằm TRƯỚC `QL.capNhat()` — sổ quá 20s không có gói · `E.so.hong` · sổ rỗng một phía — nên khi sổ chết thì lệnh đang mở **không được kiểm đường cắt, không được kiểm van cuối**, giá chạy bao xa cũng không ai đóng. Lỗ hổng **có từ trước**, nhưng trước nay được **đường cắt rộng che cho**: cắt ở 33% giá thì mất sổ vài phút hiếm khi đủ để giá đi hết quãng đó. Đường cắt mới chỉ 3–8% nên tấm che biến mất → phải vá cùng lượt. **Đo thật trong log 11 ngày:** 19/08 01:35→01:40 **6 phút liền, 20/20 coin mất sổ, WS im, ĐANG CÓ 3 LỆNH MỞ** — vốn đứng nguyên $178,12 và bộ đếm ghi DB đứng nguyên 770236, chứng minh `capNhat()` không chạy lần nào; tổng 8 phút "0 sổ live" trong đó 6 phút có lệnh mở; thêm **10.333 lần** `so lenh hong` từ đồng bộ định kỳ. **Cách vá:** thêm `canhLenhMu()` — sổ chết thì lệnh đang mở vẫn được canh bằng **giá REST ticker** (`bangGia`, làm mới mỗi 60 giây, đường dữ liệu ĐỘC LẬP với WebSocket). Chỉ chạy hai đường ra bảo vệ vốn; **không** chạy chốt lời (cò đảo chiều cần sổ mới tính được), **không** mở lệnh mới, **không** DCA. Ticker cũ hơn 3 phút thì không tin → báo `khong_co_gia` và **kêu to** thay vì đoán. Đóng mù bị **phạt trượt 1%** (`_khopMu`) — nhánh cũ để `truotPc: 0`, tức giả định khớp hoàn hảo đúng vào lúc thị trường tệ nhất. Logic đường cắt tách thành `_capNhatDuongCat()` **dùng chung** cả hai nhánh, có phép kiểm bắt việc chép ra hai bản. **244/244 đạt** (trước 226) |

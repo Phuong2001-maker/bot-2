@@ -8,7 +8,17 @@
 
 module.exports = {
   /* ---------------- chế độ chạy ---------------- */
-  CHE_DO: 'giay',          // 'giay' | 'nho' | 'day'  — luôn khởi động ở 'giay'
+  /* ⭐ BA CHẾ ĐỘ, CÙNG MỘT ĐƯỜNG CODE (Giai đoạn 10):
+       'giay'  — không gửi gì tới sàn. Vẫn TÍNH đủ lệnh SL và ghi lại để
+                 soi. Không cần API key. ⛔ MẶC ĐỊNH.
+       'demo'  — gọi API OKX THẬT + header `x-simulated-trading: 1`.
+                 Tiền ảo, hạ tầng thật, đường code thật. Cần khoá DEMO.
+       'that'  — y hệt 'demo', bỏ mỗi header đó. ⛔ TIỀN THẬT.
+
+     ⛔ Khác 'giay' thì bắt buộc có file `TOI-HIEU-RUI-RO.flag`, nếu không
+     bot tự lùi về 'giay' (kiểm ở bot.js). Thiếu khoá cũng lùi về 'giay' —
+     chạy thật mà không đặt được SL còn tệ hơn chạy giấy. */
+  CHE_DO: 'giay',
   SAN: 'okx',
   KY_QUY: 'cheo',
   DON_BAY: 10,
@@ -104,7 +114,19 @@ module.exports = {
      sách như lệnh vừa mở.                                                */
   TRAN_RUI_RO: {
     TONG_PC: 0.30,              // = đúng ngân sách cũ (3 × $20 / $200)
-    CANH_BAO_CUNG_HUONG_PC: 0.20,   // chỉ KÊU, không chặn
+
+    /* ⭐ TRẦN THEO HƯỚNG — thêm 2026-08-24 cùng lượt mở khoá SHORT.
+       Trần rủi ro TỔNG không bắt được tương quan: N lệnh long trên N alt
+       lúc BTC sập không phải N lệnh, đó là 1 lệnh cỡ N×. Đo thật trên 56
+       lệnh đầu: 53 lệnh LONG, tức danh mục thực chất là MỘT vị thế.
+
+       Nay không hướng nào được chiếm quá tỷ lệ này của ngân sách. Ở mức
+       0,70 nghĩa là tối đa $42 trong $60 — luôn chừa $18 cho hướng kia.
+
+       ⚠ Hôm nay nó KHÔNG chặn gì: long đang dùng ~$24 = 40%. Nó chỉ nổ
+       khi danh mục bắt đầu dồn một phía, đúng lúc cần nổ.
+       Đặt 1.0 = tắt (quay về chỉ cảnh báo). */
+    TRAN_CUNG_HUONG_PC: 0.70,
   },
 
   /* ================= TIỀN — TÍNH BẰNG ĐÔ, KHÔNG PHẢI % =================
@@ -229,6 +251,31 @@ module.exports = {
   HOI_LAI_TY_LE: 0.25,
   HOI_LAI_TRAN: 0.35,
 
+  /* ============ SÀN — ĐƯA CẮT LỖ RA KHỎI RAM BOT (Giai đoạn 10) ============
+     Cắt lỗ nằm trong RAM có ba tầng trễ không gỡ được bằng code:
+       1. nhịp 2 giây — giá đi hết quãng cắt trong 2 giây thì cắt muộn.
+          ⚠ Bản trailing 3–8% NHẠY CẢM hơn hẳn bản cắt $20 (=33% giá):
+          một cú 2 giây khó đi hết 33%, nhưng đi hết 3% thì bình thường.
+       2. Node đơn luồng — 20 lệnh cùng chạm cắt thì lệnh cuối chờ lệnh đầu
+       3. bot chết / mất mạng — không ai cắt cả
+     Máy khớp lệnh của sàn canh ở mức micro-giây, song song, và sống độc
+     lập với bot. Đó là cách DUY NHẤT xử lý được cả ba.                   */
+  SAN: {
+    /* ⭐ VÙNG CHẾT — chỉ dời SL khi mốc mới tốt hơn mốc ĐÃ ĐẶT ngần này.
+       Đường cắt siết mỗi 2 giây; sửa lệnh mỗi lần siết thì 20 vị thế =
+       10 yêu cầu/giây chỉ riêng cho SL → đụng giới hạn tốc độ API ĐÚNG
+       LÚC thị trường loạn, tức đúng lúc SL quan trọng nhất.
+       0,3% cắt số lần sửa xuống hàng chục lần mà mốc SL vẫn bám sát. */
+    VUNG_CHET_PC: 0.003,
+
+    /* SL là lưới an toàn — đặt hỏng mà im lặng là tệ nhất, nên thử lại. */
+    SL_THU_LAI: 2,
+
+    /* Đối soát với sàn theo chu kỳ này (chỉ chế độ demo/that): vị thế nào
+       đang mở thật, SL nào còn treo, SL nào mồ côi. */
+    DOI_SOAT_MS: 300000,
+  },
+
   /* --- Cổng thanh lý --- */
   DEM_THANH_LY_TOI_THIEU: 1.5,
   MMR_UOC_TINH: 0.005,       // tỷ lệ ký quỹ duy trì ước tính của OKX (bậc thấp)
@@ -308,9 +355,36 @@ module.exports = {
      nhóm trong/ngoài đều là LỆNH THẬT có thắng/thua để so.
      Xoá `khungGoc` = mất vĩnh viễn khả năng trả lời câu hỏi đó.        */
   SETUP: {
-    'SHORT-A': { huong: 'short', chg24Min: 0.30, fundingMin: 0.0005,
+    /* ⭐ HẠ NGƯỠNG SHORT 2026-08-24 — chủ dự án chốt: bot phải có lệnh short.
+       Đo trên 311.513 nhịp của 11,3 ngày để tìm ĐÚNG chỗ nghẽn:
+
+         chg24 >= 30%        13.241 nhịp (4,25%)   ← KHÔNG phải nút thắt
+         funding >= 0,05%    15.380 nhịp (4,94%)   ← KHÔNG phải nút thắt
+         CẢ HAI cùng lúc        686 nhịp (0,22%)   ← đây
+         qua cả 4 vế            395 nhịp (0,13%)   → chỉ 3 coin, 17 giờ-coin
+
+       Hai điều kiện GẦN NHƯ LOẠI TRỪ NHAU: coin pump 30% thì funding thấp,
+       coin funding cao thì lại không pump. Kết quả 11,3 ngày: 1 lệnh SHORT.
+
+       Vì sao mốc funding cũ bất khả thi: 41% số nhịp nằm ở 0,01–0,02% —
+       đó là MỨC NỀN của sàn. 0,05% là 5 lần mức nền.
+
+       Chọn 20% / 0,02% từ bảng đo (giữ NGUYÊN mọi chốt chặn squeeze):
+         30% / 0,05%   395 nhịp ·  3 coin · 17 giờ-coin   ← cũ
+         25% / 0,02% 1.217 nhịp ·  5 coin · 50 giờ-coin
+         20% / 0,02% 1.659 nhịp ·  5 coin · 57 giờ-coin   ← CHỌN, gấp 4,2×
+         20% / 0,01% 8.231 nhịp · 27 coin ·304 giờ-coin   ⛔ gấp 20,8×
+
+       ⛔ KHÔNG hạ funding xuống 0,01%. Đó là mức nền, hạ tới đó thì vế
+       funding ngừng lọc gì cả và giả thiết "long đang chen chúc" tan luôn —
+       biến SHORT-A thành "short bất cứ thứ gì vừa pump", tức short vào sức
+       mạnh. 0,02% vẫn là GẤP ĐÔI mức nền, vẫn giữ được tín hiệu chen chúc.
+
+       ⚠ Ngưỡng SHORT vẫn CAO HƠN LONG-A (20% so với 10–15%) — cố ý: short
+       một cú pump cần bằng chứng kiệt sức rõ hơn là long một cú tăng. */
+    'SHORT-A': { huong: 'short', chg24Min: 0.20, fundingMin: 0.0002,
                  khungGoc: { tu: '23:00', den: '03:00' } },
-    'SHORT-B': { huong: 'short', tangThemMin: 0.10, fundingMin: 0.0005,
+    'SHORT-B': { huong: 'short', tangThemMin: 0.10, fundingMin: 0.0002,
                  khungGoc: { tu: '07:00', den: '15:00' } },
     'LONG-A':  { huong: 'long',  chg24: [0.10, 0.15], fundingMax: 0.0003,
                  khungGoc: { tu: '18:00', den: '22:30' } },
@@ -421,6 +495,20 @@ module.exports = {
     OI_MAU_CACH_MS: 30000, OI_HIST_TRAN: 400,
     NHIP_GHI_MS: 60000,        // nhịp ghi bảng `nhip`
     MOC_GIA_CHG24: 0.25,       // chụp mốc 07:00 cho coin biến động >= mức này
+
+    /* ⛔ "Hôm qua đã pump lớn" — ngưỡng cho cột `moc_gia.da_tang30_hom_qua`.
+       Trước 2026-08-24 đây là SỐ CỨNG `0.30` nằm lạc trong `bot.js`, vi
+       phạm quy tắc #4 và nhóm phép kiểm SỐ CỨNG đã để lọt.
+
+       Cột này là CỔNG HAI CHIỀU, đổi nó ảnh hưởng cả hai setup:
+         · SHORT-B cần nó TRUE  → hạ ngưỡng = SHORT-B dễ nổ hơn
+         · LONG-B bị chặn nếu TRUE → hạ ngưỡng = LONG-B KHÓ hơn
+       Cả hai chiều đều đẩy danh mục về phía cân bằng hơn, nên hạ xuống
+       khớp với `SHORT-A.chg24Min` là hợp lý.
+
+       ⚠ Tên cột trong DB vẫn là `da_tang30_hom_qua` (lý do lịch sử) —
+       đừng đọc số 30 trong tên cột như một ngưỡng. */
+    MOC_PUMP_LON: 0.20,
     NEN_RAU_NHAN: 1.5, NEN_RAU_SAN_BIEN: 0.15, NEN_DONG_LUI: 0.005,
     DAY_MOI_CUA_SO_PHUT: 30, DAY_MOI_MAU_TOI_THIEU: 30, DAY_MOI_BIEN: 0.001,
     BTC_PHA_DINH_SAT: 0.999, BTC_PHA_DINH_CHG24: 0.02,

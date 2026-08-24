@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS lenh (
   dinh_lai_pc DOUBLE, hoi_lai_diem DOUBLE, so_lan_dca INT, phut_om INT,
   canh_bao_da_hien VARCHAR(255),
   khoang_trailing DOUBLE, lo_thiet_ke_usd DOUBLE,
+  sl_algo_id VARCHAR(48), sl_gia VARCHAR(48),
   la_giay TINYINT, ver_trong_so VARCHAR(24),
   INDEX ix_lenh_coin (coin, ts_mo), INDEX ix_lenh_dong (ts_dong)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -137,8 +137,33 @@ kiem('⛔ ngân sách rủi ro <= 1/3 vốn',
 kiem('ngân sách mua được >= 4 lệnh ở khoảng trailing rộng nhất',
   (cfg.TRAN_RUI_RO.TONG_PC * cfg.VON) / (cfg.TRAILING.KHOANG_TRAN * cfg.KY_QUY_LAN_1 * cfg.DON_BAY) >= 4,
   Math.floor((cfg.TRAN_RUI_RO.TONG_PC * cfg.VON) / (cfg.TRAILING.KHOANG_TRAN * cfg.KY_QUY_LAN_1 * cfg.DON_BAY)));
-kiem('cảnh báo tập trung cùng hướng <= ngân sách tổng',
-  cfg.TRAN_RUI_RO.CANH_BAO_CUNG_HUONG_PC <= cfg.TRAN_RUI_RO.TONG_PC);
+/* ⛔ TRẦN THEO HƯỚNG — trần TỔNG không bắt được tương quan: N lệnh cùng
+   phía lúc BTC quét là 1 lệnh cỡ N×. Đo thật: 53/56 lệnh đầu là LONG. */
+kiem('có trần theo HƯỚNG, không chỉ cảnh báo',
+  cfg.TRAN_RUI_RO.CANH_BAO_CUNG_HUONG_PC === undefined
+  && cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC > 0);
+kiem('⛔ trần theo hướng < 1 (luôn chừa chỗ cho hướng kia)',
+  cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC < 1, cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC);
+kiem('trần theo hướng đủ rộng để không chặn oan (>= 0,5)',
+  cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC >= 0.5, cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC);
+
+/* ⭐ SHORT phải CÓ CỬA NỔ. Đo trên 311.513 nhịp: mốc cũ 30%/0,05% chỉ đạt
+   395 nhịp trên 3 coin trong 11,3 ngày → đúng 1 lệnh short. Nút thắt là
+   GIAO của hai vế, không phải vế nào riêng lẻ. */
+kiem('ngưỡng funding SHORT > mức nền sàn (0,01%)',
+  cfg.SETUP['SHORT-A'].fundingMin > 0.0001 && cfg.SETUP['SHORT-B'].fundingMin > 0.0001,
+  cfg.SETUP['SHORT-A'].fundingMin);
+kiem('⛔ ngưỡng funding SHORT >= 2× mức nền (giữ tín hiệu chen chúc)',
+  cfg.SETUP['SHORT-A'].fundingMin >= 0.0002, cfg.SETUP['SHORT-A'].fundingMin);
+kiem('⛔ SHORT vẫn khắt khe hơn LONG-A (cần cú pump lớn hơn)',
+  cfg.SETUP['SHORT-A'].chg24Min > cfg.SETUP['LONG-A'].chg24[1],
+  { short: cfg.SETUP['SHORT-A'].chg24Min, longATran: cfg.SETUP['LONG-A'].chg24[1] });
+/* Ngưỡng "hôm qua pump lớn" phải nằm trong config, không phải số cứng —
+   nó là cổng hai chiều: SHORT-B cần TRUE, LONG-B bị chặn nếu TRUE. */
+kiem('ngưỡng pump lớn nằm trong config, khớp ngưỡng SHORT-A',
+  cfg.QUET.MOC_PUMP_LON === cfg.SETUP['SHORT-A'].chg24Min, cfg.QUET.MOC_PUMP_LON);
+kiem('⛔ bot.js KHÔNG còn số cứng 0.30 cho da_tang30_hom_qua',
+  !/chg24 >= 0\.30/.test(fs.readFileSync(path.join(__dirname, '..', 'bot.js'), 'utf8')));
 
 /* Số coin theo dõi: cũng bỏ trần đếm, thay bằng trần RAM — thứ nó thật
    sự tiêu. Trần RAM đặt sai thì bot bị OOM kill, mà bot chết là KHÔNG AI
@@ -371,7 +396,7 @@ nhom('⛔ MỌI LỐI CHẶN MỞ LỆNH PHẢI GHI SỰ KIỆN (quét mã ngu�
      không giải thích nổi vì sao. Chặn im lặng = mù. */
   kiem('⛔ _moLenh KHÔNG còn `return` trần (mọi lối chặn đều ghi sự kiện)',
     !/^\s*if \([^)]*\) return;\s*$/m.test(thanMo));
-  for (const ly of ['chan_ngat_mach', 'chan_tran_rui_ro', 'chan_cong_thanh_ly'])
+  for (const ly of ['chan_ngat_mach', 'chan_tran_rui_ro', 'chan_tran_cung_huong', 'chan_cong_thanh_ly'])
     kiem(`_moLenh ghi lý do "${ly}"`, thanMo.includes(ly));
   kiem('cổng trần rủi ro dùng RỦI RO CÒN LẠI, không phải rủi ro lúc mở',
     /ruiRoDangMo\(\)/.test(thanMo));
@@ -382,6 +407,110 @@ nhom('⛔ MỌI LỐI CHẶN MỞ LỆNH PHẢI GHI SỰ KIỆN (quét mã ngu�
     /phaiXa/.test(src2));
   kiem('⛔ coin ĐANG CÓ LỆNH MỞ vẫn miễn nhiễm khỏi việc gỡ',
     /if \(st && st\.lenh\) continue;/.test(src2));
+}
+
+/* ================================================================= */
+nhom('⭐ GIAI ĐOẠN 10 — CẮT LỖ PHÍA SÀN (cấu hình + quét mã nguồn)');
+{
+  const San = require('../lib/san');
+  const TT10 = require('../lib/okx-tt');
+  const srcSan = fs.readFileSync(path.join(__dirname, '..', 'lib', 'san.js'), 'utf8');
+  const srcTT = fs.readFileSync(path.join(__dirname, '..', 'lib', 'okx-tt.js'), 'utf8');
+  const srcL = fs.readFileSync(path.join(__dirname, '..', 'lib', 'lenh.js'), 'utf8');
+  const srcB = fs.readFileSync(path.join(__dirname, '..', 'bot.js'), 'utf8');
+
+  kiem('⛔ CHE_DO mặc định vẫn là "giay"', cfg.CHE_DO === 'giay', cfg.CHE_DO);
+  kiem('có nhóm SAN trong config', !!cfg.SAN && cfg.SAN.VUNG_CHET_PC > 0);
+  /* Vùng chết quá nhỏ = spam sửa lệnh đúng lúc thị trường loạn; quá lớn =
+     SL tụt xa đường cắt thật. Khoá lại khoảng đã cân nhắc. */
+  kiem('vùng chết trong [0,1% ; 1%]',
+    cfg.SAN.VUNG_CHET_PC >= 0.001 && cfg.SAN.VUNG_CHET_PC <= 0.01, cfg.SAN.VUNG_CHET_PC);
+  kiem('⛔ vùng chết NHỎ HƠN khoảng trailing hẹp nhất (SL luôn bám sát được)',
+    cfg.SAN.VUNG_CHET_PC < cfg.TRAILING.KHOANG_SAN);
+  kiem('SL có thử lại (lưới an toàn không được hỏng im lặng)', cfg.SAN.SL_THU_LAI >= 1);
+
+  /* ⛔ SL phải khớp THỊ TRƯỜNG. Lệnh giới hạn có thể trượt qua mà không
+     khớp — một SL không khớp còn tệ hơn không có SL, vì ta tưởng mình
+     đang được bảo vệ. */
+  kiem('⛔ SL đặt kiểu THỊ TRƯỜNG (slOrdPx = -1)', /slOrdPx:\s*'-1'/.test(srcTT));
+  kiem('⛔ SL là lệnh GIẢM vị thế (reduceOnly)', /reduceOnly:\s*true/.test(srcTT));
+  kiem('SL dùng endpoint ALGO, không phải lệnh thường',
+    /trade\/order-algo/.test(srcTT) && /trade\/cancel-algos/.test(srcTT));
+  /* Chế độ demo khác chế độ thật ĐÚNG một header — không có nhánh code
+     riêng nào, để `demo` kiểm chứng được đúng đường sẽ chạy thật. */
+  kiem('demo và thật khác nhau ĐÚNG một header', /x-simulated-trading/.test(srcTT));
+  /* ⛔ Dự án cũ ĐÃ LỘ TOKEN một lần theo kiểu "in ra để debug rồi quên". */
+  kiem('⛔ KHÔNG log apiSecret / passphrase ở bất kỳ đâu',
+    !/(ghi|canh)\([^)]*apiSecret/.test(srcTT) && !/(ghi|canh)\([^)]*passphrase/.test(srcTT));
+
+  kiem('thiếu khoá thì LÙI VỀ giay, không chạy nửa vời', /lui ve che do GIAY|_cheDo = 'giay'/.test(srcSan));
+  kiem('quy đổi USD → hợp đồng có nhân ctVal (bẫy sz của SWAP)', /ctVal/.test(srcSan));
+  kiem('làm tròn XUỐNG theo lotSz (thà thiếu còn hơn bị từ chối)', /Math\.floor/.test(srcSan));
+
+  /* Ba thời điểm bắt buộc: mở → đặt, siết → dời, đóng → huỷ. */
+  kiem('mở lệnh → đặt SL', /San\.datSL/.test(srcL));
+  kiem('đường cắt siết → dời SL', /San\.suaSL/.test(srcL));
+  kiem('⛔ đóng lệnh → HUỶ SL (kẻo mồ côi cắt nhầm lệnh sau)', /San\.huySL/.test(srcL));
+  /* ⛔ Lời gọi mạng KHÔNG được chặn vòng lặp 2 giây — một API chậm sẽ kéo
+     lùi việc quản lý MỌI coin khác. Đường cắt RAM vẫn canh song song. */
+  kiem('⛔ gọi sàn KHÔNG chặn nhịp (không await trong vòng lặp lệnh)',
+    !/await San\.(datSL|suaSL|huySL)/.test(srcL));
+
+  kiem('bot.js đối soát TRƯỚC khi bật nhịp phân tích',
+    srcB.indexOf('doiSoatKhoiDong()') < srcB.indexOf('setInterval(nhipPhanTich'));
+  kiem('đối soát cảnh báo khi SÀN có vị thế mà DB không có', /san_co_db_khong/.test(srcB));
+  kiem('đối soát cảnh báo SL mồ côi', /SL_MO_COI/.test(srcB));
+  /* SL trên sàn khớp thì KHÔNG AI báo cho bot — bot phải tự đi hỏi. */
+  kiem('có đối soát ĐỊNH KỲ (bắt lúc SL sàn đã khớp)',
+    /doiSoatDinhKy/.test(srcB) && /san_da_dong_ram_chua/.test(srcB));
+  /* ⛔ Đóng sổ sách bằng giá ĐOÁN sẽ làm hỏng chính bộ dữ liệu dự án dựng
+     lên để đo. Thà lệch và kêu to còn hơn ghi một con số sai. */
+  kiem('⛔ đối soát định kỳ CHỈ cảnh báo, KHÔNG tự đóng sổ sách',
+    !/doiSoatDinhKy[\s\S]{0,1600}?_dong\(/.test(srcB));
+  kiem('San.laThat() sai ở chế độ giay', San.laThat() === false);
+  kiem('chưa nạp khoá thì okx-tt báo chưa sẵn sàng', TT10.daNapKhoa() === false);
+}
+
+/* ================================================================= */
+nhom('⭐ NẠP LẠI LỆNH ĐANG MỞ KHI KHỞI ĐỘNG (vá lỗi mất trạng thái)');
+{
+  const QL = new QuanLyLenh(cfg);
+  const K = 0.05, giaVao = 100, notional = 60;
+  /* long: đường cắt đã siết lên 98 (đỉnh 103,16) */
+  const n = QL.napLaiLenhMo([{
+    id: 1, uid: 'X-1', coin: 'ZZZ', huong: 'long', setup: 'LONG-A',
+    ts_mo: Date.now() - 3600e3, trang_thai: 'THAM_DO', trong_khung: 0, gio_vn_mo: 10,
+    gia_vao_tb: '100', gia_cat: '98', gia_vao_1: '100',
+    ky_quy_usd: 6, gia_tri_lenh_usd: notional, so_lan_dca: 0, so_lan_chot: 0,
+    khoang_trailing: K, lo_thiet_ke_usd: K * notional,
+    phi_usd: 0.036, truot_usd: 0.03, funding_nhan_usd: 0,
+    sl_algo_id: null, sl_gia: null,
+  }]);
+  kiem('nạp lại được 1 lệnh', n === 1, n);
+  const st = QL.layTT('ZZZ');
+  kiem('lệnh sống lại trong RAM', !!st.lenh);
+  /* ⛔ Bất biến quan trọng nhất: đường cắt phục hồi ĐÚNG mốc chặt nhất,
+     không được nới ra. */
+  kiem('⛔ đường cắt phục hồi ĐÚNG mốc cũ, không nới ra',
+    st.lenh && Math.abs(st.lenh.giaCat - 98) < 1e-9, st.lenh && st.lenh.giaCat);
+  kiem('đỉnh giá suy ngược đúng (98 / (1−5%) ≈ 103,16)',
+    st.lenh && Math.abs(st.lenh.giaDinh - 98 / 0.95) < 1e-6, st.lenh && G2(st.lenh.giaDinh));
+  kiem('số coin dựng lại từ notional / giá vào TB',
+    st.lenh && Math.abs(st.lenh.soCoin - notional / giaVao) < 1e-9);
+  /* ⚠ baoDong chỉ có trong RAM → phải về false, phía an toàn: cần cò nổ
+     LẠI mới chốt, chứ không chốt nhầm ngay sau khi khởi động. */
+  kiem('⚠ báo động KHÔNG khôi phục (phía an toàn)', st.lenh && st.lenh.baoDong === false);
+  kiem('nạp lại lần hai KHÔNG đè lên lệnh đang có',
+    QL.napLaiLenhMo([{ id: 1, coin: 'ZZZ', huong: 'long', gia_vao_tb: '100',
+                       gia_cat: '98', gia_tri_lenh_usd: 60 }]) === 0);
+  kiem('bản ghi thiếu dữ liệu thì BỎ QUA, không dựng lệnh rác',
+    QL.napLaiLenhMo([{ id: 9, coin: 'QQQ', huong: 'long' }]) === 0 && !QL.layTT('QQQ').lenh);
+
+  /* Vốn dựng lại từ DB thay vì đặt về VON mỗi lần khởi động lại. */
+  const Q2 = new QuanLyLenh(cfg);
+  Q2.napLaiVon(-15.65);
+  kiem('vốn dựng lại = vốn gốc + PnL đã đóng',
+    Math.abs(Q2.von - (cfg.VON - 15.65)) < 1e-9, G2(Q2.von));
 }
 
 /* ================================================================= */

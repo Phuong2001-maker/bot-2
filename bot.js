@@ -25,6 +25,7 @@ const S = require('./lib/tinhieu');
 const K = require('./lib/khung');
 const LC = require('./lib/loc-coin');
 const { QuanLyLenh, TT, DA_MO } = require('./lib/lenh');
+const San = require('./lib/san');
 
 /* config.local.js quyết định ghi ảnh trạng thái ở đâu.
    Trên server: thư mục gốc web của tên miền → trình duyệt đọc file tĩnh,
@@ -268,7 +269,14 @@ async function mocGia7h() {
     if (!engines.has(t.sym) && Math.abs(t.chg24) < cfg.QUET.MOC_GIA_CHG24) continue;
     DB.ghiMocGia({
       ngay: G.ngay, coin: t.sym, gia7h: t.last, chg24Luc7h: t.chg24,
-      daTang30HomQua: t.chg24 >= 0.30, dinh24h: t.high24, day24h: t.low24,
+      /* ⛔ Trước 2026-08-24 đây là số cứng `0.30` — vi phạm quy tắc "không
+         viết số cứng trong code", và nhóm phép kiểm SỐ CỨNG đã để lọt.
+         Cột này là CỔNG của cả SHORT-B (cần TRUE) lẫn LONG-B (chặn nếu
+         TRUE), nên một con số nằm lạc trong bot.js đang âm thầm điều
+         khiển hai setup. ⚠ Tên cột `da_tang30_hom_qua` giữ nguyên vì lý
+         do lịch sử — ngưỡng thật đọc từ `QUET.MOC_PUMP_LON`. */
+      daTang30HomQua: t.chg24 >= cfg.QUET.MOC_PUMP_LON,
+      dinh24h: t.high24, day24h: t.low24,
     });
   }
   ghi(`chup moc gia 07:00 ngay ${G.ngay}`);
@@ -585,8 +593,9 @@ function inSucKhoe() {
   /* ⚠ Tập trung cùng hướng: N lệnh long trên N alt lúc BTC sập không
      phải N lệnh, đó là 1 lệnh cỡ N×. Trần rủi ro tổng KHÔNG bắt được. */
   const lech = Math.max(rr.long, rr.short);
-  if (lech > cfg.TRAN_RUI_RO.CANH_BAO_CUNG_HUONG_PC * QL.vonBanDau)
-    canhB.push(`TAP TRUNG ${rr.long >= rr.short ? 'LONG' : 'SHORT'} $${lech.toFixed(1)}`);
+  const tranHuong = cfg.TRAN_RUI_RO.TRAN_CUNG_HUONG_PC * tranRR;
+  if (lech > tranHuong * 0.8)
+    canhB.push(`TAP TRUNG ${rr.long >= rr.short ? 'LONG' : 'SHORT'} $${lech.toFixed(1)}/$${tranHuong.toFixed(0)}`);
 
   ghi(`${engines.size} coin · loc=${soQuaLoc}/${cfg.SO_COIN_TRAN == null ? 'kh.gioi.han' : cfg.SO_COIN_TRAN}`
     + ` · ${live} so live · ${QL.soLenhMo()} lenh mo · von $${QL.vonHienTai().toFixed(2)}`
@@ -604,6 +613,101 @@ function napGhim() {
   } catch (e) {}
 }
 
+/* =================================================================== */
+/*  ĐỐI SOÁT LÚC KHỞI ĐỘNG — Giai đoạn 10                              */
+/* =================================================================== */
+/**
+ * ⛔ Chạy TRƯỚC khi bật nhịp phân tích. Bỏ qua bước này là mở lại đúng
+ * lỗ hổng: bot khởi động lại → không biết mình đang có vị thế → mở thêm
+ * lệnh trùng, và lệnh cũ kẹt vĩnh viễn trong DB.
+ *
+ * Ba việc, theo thứ tự:
+ *   1. dựng lại VỐN từ tổng PnL đã đóng (thay vì đặt về $200)
+ *   2. nạp lại LỆNH ĐANG MỞ từ DB
+ *   3. chỉ chế độ demo/that: hỏi SÀN xem sự thật có khớp DB không
+ */
+async function doiSoatKhoiDong() {
+  try {
+    const pnl = await DB.tongPnlDaDong();
+    QL.napLaiVon(pnl);
+  } catch (e) { canh('doi soat: khong doc duoc tong PnL —', e.message); }
+
+  let dong = [];
+  try {
+    dong = await DB.docLenhMo();
+    QL.napLaiLenhMo(dong);
+  } catch (e) { canh('doi soat: khong doc duoc lenh mo —', e.message); }
+
+  if (!San.laThat() || !San.sanSang()) {
+    if (dong.length) ghi(`doi soat: ${dong.length} lenh mo nap tu DB (che do giay, khong hoi san)`);
+    return;
+  }
+
+  /* ---- Đối soát với SÀN. Sàn là SỰ THẬT, DB chỉ là ghi chép. ---- */
+  const vt = await San.viTheThat();
+  const sl = await San.slThat();
+  const symDb = new Set(dong.map(r => r.coin));
+  const symSan = new Set(vt.map(p => p.sym));
+
+  for (const p of vt) {
+    if (!symDb.has(p.sym)) {
+      /* Vị thế có thật trên sàn mà DB không biết — nguy hiểm nhất, vì bot
+         sẽ coi coin đó là trống và có thể mở CHỒNG thêm một lệnh nữa. */
+      canh(`⛔⛔ DOI SOAT: ${p.sym} co VI THE THAT tren san (${p.huong} ${p.sz})`
+        + ' nhung DB khong co lenh mo tuong ung. Kiem tay truoc khi de bot chay tiep.');
+      DB.ghiSuKien({ coin: p.sym, tu: 'DOI_SOAT', den: 'LECH', lyDo: 'san_co_db_khong',
+                     chiTiet: { huong: p.huong, sz: p.sz, giaVao: p.giaVao } });
+    }
+  }
+  for (const r of dong) {
+    if (!symSan.has(r.coin)) {
+      canh(`⛔ DOI SOAT: DB ghi ${r.coin} dang mo nhung SAN khong co vi the.`
+        + ' Nhieu kha nang SL da khop luc bot chet — can dong so sach bang tay.');
+      DB.ghiSuKien({ coin: r.coin, tu: 'DOI_SOAT', den: 'LECH', lyDo: 'db_co_san_khong',
+                     chiTiet: { id: r.id } });
+    }
+  }
+  for (const a of sl) {
+    if (!symSan.has(a.sym)) {
+      canh(`⛔ DOI SOAT: SL MO COI tren san — ${a.sym} id ${a.algoId} @ ${a.giaKichHoat},`
+        + ' khong con vi the nao. Huy no di keo cat nham lenh sau.');
+      DB.ghiSuKien({ coin: a.sym, tu: 'DOI_SOAT', den: 'SL_MO_COI', lyDo: 'khong_con_vi_the',
+                     chiTiet: { algoId: a.algoId, gia: a.giaKichHoat } });
+    }
+  }
+  ghi(`doi soat xong: san ${vt.length} vi the · ${sl.length} SL treo · DB ${dong.length} lenh mo`);
+}
+
+/**
+ * ⚠ ĐỐI SOÁT ĐỊNH KỲ — chỉ chế độ demo/that.
+ *
+ * Lỗ hổng nó bịt: khi SL **trên sàn** khớp, vị thế đóng ở phía sàn nhưng
+ * RAM bot vẫn tưởng lệnh còn mở. Không ai báo cho bot cả — bot chỉ biết
+ * nếu tự đi hỏi.
+ *
+ * ⛔ Ở đây CỐ Ý chỉ CẢNH BÁO chứ không tự đóng sổ sách. Muốn đóng cho
+ * đúng thì cần giá khớp thật + phí thật từ sàn; đóng bằng giá đoán sẽ làm
+ * hỏng chính bộ dữ liệu mà cả dự án dựng lên để đo. Việc còn lại của Giai
+ * đoạn 10: nghe kênh `orders` riêng tư qua WebSocket để biết ngay lúc
+ * khớp, kèm giá và phí thật.
+ */
+async function doiSoatDinhKy() {
+  if (!San.laThat() || !San.sanSang()) return;
+  try {
+    const vt = await San.viTheThat();
+    const symSan = new Set(vt.map(p => p.sym));
+    for (const [sym, st] of QL.trangThai) {
+      if (!st.lenh) continue;
+      if (!symSan.has(sym)) {
+        canh(`⛔⛔ DOI SOAT: RAM tuong ${sym} dang mo nhung SAN KHONG CON vi the.`
+          + ' Gan nhu chac chan SL da khop. So sach dang LECH — dong tay va kiem lai.');
+        DB.ghiSuKien({ coin: sym, tu: 'DOI_SOAT', den: 'LECH', lyDo: 'san_da_dong_ram_chua',
+                       chiTiet: { id: st.lenh.id, giaCat: st.lenh.giaCat } });
+      }
+    }
+  } catch (e) { canh('doi soat dinh ky loi:', e.message); }
+}
+
 /* --------------------------------------------------------- khởi động */
 (async () => {
   ghi('='.repeat(60));
@@ -613,9 +717,15 @@ function napGhim() {
     cfg.CHE_DO = 'giay';
   }
   ghi(`DB: ${DB.FILE_DB}`);
+  /* Bộ chuyển sàn: quyết định gửi thật hay chỉ tính khô. Thiếu khoá thì
+     nó tự lùi về `giay` và nói rõ lý do. */
+  cfg.CHE_DO = San.khoiTao(cfg.CHE_DO, (LOCAL && LOCAL.OKX) || null);
   ghi('='.repeat(60));
 
   await R.napHopDong();
+  /* ⛔ ĐỐI SOÁT TRƯỚC KHI BẬT NHỊP — không bao giờ để nhịp phân tích chạy
+     khi chưa biết mình đang có vị thế nào. */
+  await doiSoatKhoiDong();
   napGhim();
   ws.batDau();
   await new Promise(r => setTimeout(r, 1500));
@@ -628,6 +738,7 @@ function napGhim() {
   setInterval(inSucKhoe, cfg.NHIP_LOG);
   setInterval(napGhim, 30000);
   setInterval(() => R.napHopDong(), 6 * 3600e3);
+  setInterval(doiSoatDinhKy, cfg.SAN.DOI_SOAT_MS);
   ghi(`dang chay. Warmup ${cfg.WARMUP_GIAY}s/coin truoc khi phat tin hieu dau tien.`);
 })();
 
