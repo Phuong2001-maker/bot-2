@@ -134,6 +134,24 @@ module.exports = {
      xuống thì size vẫn thế. Nhờ vậy vốn về 0 hay âm cũng không làm hỏng
      công thức size (quan trọng cho chế độ test dài).                     */
   VON: 200,
+
+  /* ⭐ MỐC TÍNH VỐN — chỉ cộng PnL của lệnh đóng SAU thời điểm này.
+     Đặt 0 = cộng toàn bộ lịch sử.
+
+     Vì sao cần: `napLaiVon()` dựng vốn từ `SUM(pnl_usd)` của cả bảng.
+     Nhưng 57 lệnh đầu chạy bằng cơ chế HOÀN TOÀN KHÁC (cắt lỗ $20 cố
+     định, chốt lời nhả nửa đỉnh, trần 3 lệnh) — trộn lãi lỗ của chúng
+     vào bản mới là làm nhiễu chính phép đo.
+
+     ⛔ KHÔNG xoá dữ liệu cũ. 57 lệnh đó là bộ dữ liệu đã dùng để hiệu
+     chỉnh TOÀN BỘ cơ chế mới — sàn/trần trailing, sàn phí, ngưỡng SHORT.
+     Xoá đi là mất mốc so sánh và sau này không trả lời được câu "bản mới
+     có tốt hơn không". Chỉ NGỪNG TÍNH, không xoá.
+
+     Giá trị hiện tại = 2026-08-24 08:05:00 UTC (15:05 giờ VN) — đúng lúc
+     bot khởi động với cơ chế trailing + SHORT mới.
+     Muốn reset lần nữa thì đổi con số này, không cần đụng DB.           */
+  MOC_VON_MS: 1787558700000,
   KY_QUY_LAN_1: 6,              // × đòn bẩy 10 → $60 giá trị lệnh
   KY_QUY_DCA: 4,                // × 10 → $40.  ⛔ ĐÚNG MỘT LẦN
   SO_LAN_DCA_TOI_DA: 1,         // ⛔ bất biến

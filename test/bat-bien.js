@@ -410,6 +410,50 @@ nhom('⛔ MỌI LỐI CHẶN MỞ LỆNH PHẢI GHI SỰ KIỆN (quét mã ngu�
 }
 
 /* ================================================================= */
+nhom('⭐ MỐC TÍNH VỐN + HÀM BĂM PHIÊN BẢN');
+{
+  /* Vốn dựng lại chỉ tính từ mốc — 57 lệnh cơ chế cũ vẫn nằm trong DB để
+     đối chiếu, nhưng không kéo vốn bản mới xuống theo. */
+  kiem('có MOC_VON_MS trong config', typeof cfg.MOC_VON_MS === 'number');
+  kiem('MOC_VON_MS là mốc thời gian hợp lệ (ms, sau 2020)',
+    cfg.MOC_VON_MS === 0 || cfg.MOC_VON_MS > 1577836800000, cfg.MOC_VON_MS);
+  kiem('tongPnlDaDong LỌC theo MOC_VON_MS',
+    /MOC_VON_MS/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'db.js'), 'utf8'))
+    && /ts_dong >= \?/.test(fs.readFileSync(path.join(__dirname, '..', 'lib', 'db.js'), 'utf8')));
+
+  /* ⛔ Kiểm bằng HÀNH VI, không bằng chú thích. Bản trước 2026-08-24 có
+     chú thích "không bao giờ quên bump phiên bản" nhưng KHÔNG băm nhóm
+     SETUP — nên hạ ngưỡng SHORT từ 30%/0,05% xuống 20%/0,02% mà băm đứng
+     im, DB không tách được hai đợt dữ liệu. */
+  const TH = require('../lib/tinhieu');
+  const ver0 = TH.verTrongSo(cfg);
+  const doi = (sua) => {
+    const c = JSON.parse(JSON.stringify(cfg));
+    sua(c);
+    return TH.verTrongSo(c) !== ver0;
+  };
+  kiem('⛔ băm ĐỔI khi ngưỡng chg24 của SHORT-A đổi',
+    doi(c => { c.SETUP['SHORT-A'].chg24Min = 0.25; }));
+  kiem('⛔ băm ĐỔI khi ngưỡng funding của SHORT-A đổi',
+    doi(c => { c.SETUP['SHORT-A'].fundingMin = 0.0003; }));
+  kiem('⛔ băm ĐỔI khi vùng LONG-A đổi',
+    doi(c => { c.SETUP['LONG-A'].chg24 = [0.10, 0.20]; }));
+  kiem('⛔ băm ĐỔI khi bộ lọc coin đổi',
+    doi(c => { c.LOC_COIN.BIEN_DO_24H_TOI_THIEU = 0.05; }));
+  kiem('⛔ băm ĐỔI khi ngân sách rủi ro đổi',
+    doi(c => { c.TRAN_RUI_RO.TONG_PC = 0.20; }));
+  kiem('⛔ băm ĐỔI khi VỐN đổi', doi(c => { c.VON = 100; }));
+  kiem('⛔ băm ĐỔI khi ngưỡng pump lớn đổi',
+    doi(c => { c.QUET.MOC_PUMP_LON = 0.30; }));
+  kiem('⛔ băm ĐỔI khi khoảng trailing đổi',
+    doi(c => { c.TRAILING.KHOANG_SAN = 0.02; }));
+  /* Ngược lại: đổi thứ KHÔNG dính quyết định giao dịch thì băm giữ nguyên,
+     nếu không mỗi lần chỉnh log là mất luôn khả năng gộp dữ liệu. */
+  kiem('băm GIỮ NGUYÊN khi chỉ đổi tham số hạ tầng',
+    !doi(c => { c.HA_TANG.DB_XA_MOI_LAN = 999; }));
+}
+
+/* ================================================================= */
 nhom('⭐ GIAI ĐOẠN 10 — CẮT LỖ PHÍA SÀN (cấu hình + quét mã nguồn)');
 {
   const San = require('../lib/san');
