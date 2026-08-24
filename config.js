@@ -30,16 +30,48 @@ module.exports = {
      coin nên danh sách N LUÔN bị lấp đầy — bot theo dõi coin đi ngang
      chỉ để cho đủ chỗ. Nới N từ 3 lên 12 theo cách đó = thêm 9 coin rác.
 
-     ⚠ RAM: mốc ~72MB đo ở 3 coin. Chưa đo lại ở mức trần này. Xem
-     `loc=` trong log để biết bộ lọc cho qua bao nhiêu coin mỗi vòng —
-     có DỮ LIỆU rồi hãy chỉnh trần, đừng đoán. */
-  SO_COIN_TRAN: 20,
+     ⛔ ĐÃ BỎ TRẦN ĐẾM (chủ dự án chốt 2026-08-23): trần 20 đang cắt mất
+     cơ hội thật. Thay bằng trần RAM — thứ ràng buộc thật sự của việc
+     theo dõi thêm coin. Quan sát thêm coin không tốn xu nào, chỉ tốn
+     RAM/CPU/băng thông, nên phải chặn bằng đúng thứ nó tiêu.
+
+     `null` = không giới hạn theo số đếm. Xếp hạng `diemQuan` vẫn còn tác
+     dụng: khi RAM chạm trần, coin điểm cao được giữ trước.               */
+  SO_COIN_TRAN: null,
+
+  /* ⛔ TRẦN RAM — van an toàn THẬT của cần gạt lấy mẫu.
+
+     ĐO THẬT trên chính server đang chạy (bảng điều khiển hosting 23/08):
+       · trần tài khoản  2 GB = 2048 MB  (CloudLinux LVE)
+       · bot ở 20 coin   357,68 MB  →  ~15 MB/coin + nền Node ~60 MB
+     → trần 1000 MB ≈ 63 coin, còn dư hơn 1 GB đệm.
+
+     ⛔ ĐÂY LÀ HOSTING CHIA SẺ, CHẠM TRẦN LÀ BỊ GIẾT THẲNG — không swap,
+     không ân hạn. Node lại dọn rác lười nên RSS vọt lên trước khi GC
+     chạy. Vì vậy phải chừa đệm rộng, đừng ăn sát 2 GB.
+     Bot chết = KHÔNG AI CANH LỆNH ĐANG MỞ, đúng cái lỗ hổng vừa vá ở
+     nhóm `MAT_SO`. Thà theo dõi ít coin còn hơn chết giữa chừng.
+
+     ⚠ Đổi server thì phải sửa `RAM_MAY_CHU_MB` trước — có phép kiểm bắt
+     hai trần dưới đây phải nằm trong tỷ lệ an toàn của nó.
+
+     ⚠ Thực tế RAM sẽ KHÔNG chạm trần: log cho thấy `loc=11/20`, tức bộ
+     LỌC XU HƯỚNG mới là thứ quyết định số coin (10–13), không phải trần.
+     Bỏ trần đếm 20 chỉ đưa lên ~15–25 coin ≈ 400–450 MB.                */
+  RAM_MAY_CHU_MB: 2048,         // trần RAM của tài khoản hosting — ĐO, không đoán
+  RAM_TRAN_MB: 1000,            // ngừng THÊM coin
+  RAM_XA_BOT_MB: 1200,          // vượt mức này thì GỠ BỚT coin, không chỉ ngừng thêm
 
   /* ⛔ CẦN GẠT RỦI RO — KHÔNG nới theo số coin. Ba lý do:
 
-     (a) Lỗ đồng thời tối đa = N × CAT_LO_USD. N=3 → $60 = 30% vốn.
-         N=10 → $200 = sạch vốn trong một cú quét. Ký quỹ thì thừa thãi
-         ($30/$200 khi N=3) — thứ ràng buộc thật là cắt lỗ cộng dồn.
+     (a) Lỗ đồng thời tối đa = N × rủi ro mỗi lệnh. Từ 2026-08-23 rủi ro
+         mỗi lệnh là `khoảng trailing × notional` (tối đa 8% × $60 =
+         $4,80), trước đó là hằng số $20 → N=3 khi ấy đã là 30% vốn và
+         N=10 là sạch vốn trong một cú quét. Ký quỹ thì thừa thãi
+         ($30/$200 khi N=3) — thứ ràng buộc thật là lỗ cộng dồn.
+         ⚠ Cỡ lỗ mỗi lệnh nay nhỏ đi 4–6 lần nên N CÓ THỂ xét lại, nhưng
+         phải nới bằng TRẦN TỔNG RỦI RO chứ không bỏ trắng, và vẫn còn
+         nguyên vấn đề (b) bên dưới.
      (b) Đòn bẩy ẩn qua tương quan: 10 lệnh SHORT trên 10 alt lúc BTC bật
          KHÔNG phải 10 lệnh, đó là 1 lệnh cỡ 10×. Tưởng đa dạng hoá, thực
          tế all-in. Nó cũng thổi phồng cỡ mẫu: 10 lệnh tương quan gần 1
@@ -48,8 +80,32 @@ module.exports = {
      (c) Trần lệnh là MỘT PHẦN CỦA CHIẾN LƯỢC, không phải của môi trường.
          Chạy giấy với N=10 rồi vào tiền thật với N=3 thì bộ dữ liệu giấy
          KHÔNG chuyển được — lệnh thứ 4, 5, 6 (bản thật sẽ bỏ qua) đã nằm
-         trong thống kê.                                                   */
-  SO_LENH_MO_TOI_DA: 3,
+         trong thống kê.
+
+     ⛔ ĐÃ BỎ TRẦN ĐẾM (chủ dự án chốt 2026-08-23): trần 3 đang cắt mất
+     cơ hội thật. Đo được: **29,3% thời gian** bot bị khoá vì đủ 3 lệnh,
+     và **37/71** lần vào SẴN_SÀNG không bao giờ mở được lệnh.
+
+     Thay bằng TRẦN RỦI RO — chính là thứ mà lý do (a) muốn nói. Trước
+     đây phải chặn bằng số đếm vì mỗi lệnh rủi ro $20 cố định, 3 lệnh đã
+     là 30% vốn. Nay đường cắt trailing chỉ 3–8% nên rủi ro mỗi lệnh còn
+     $1,80–$4,80: CÙNG một ngân sách 30% vốn nay mua được 12–33 lệnh
+     thay vì 3. Rủi ro y hệt, cơ hội gấp 4–10 lần.
+
+     ⚠ Lý do (b) — tương quan — trần rủi ro KHÔNG giải quyết được. Đo
+     thật: 53/54 lệnh là LONG. Nên có thêm cảnh báo tập trung cùng hướng,
+     nhưng CHỈ CẢNH BÁO, không chặn (quyết định của chủ dự án).            */
+  SO_LENH_MO_TOI_DA: null,      // null = không giới hạn số đếm
+
+  /* ⛔ NGÂN SÁCH RỦI RO — van an toàn THẬT của cần gạt rủi ro.
+     Tính bằng RỦI RO CÒN LẠI, không phải rủi ro lúc mở: lệnh đã khoá hoà
+     vốn thì phần rủi ro của nó gần bằng 0 và TRẢ LẠI CHỖ cho lệnh mới.
+     Đây là chỗ hay nhất của trailing — lệnh đang thắng không chiếm ngân
+     sách như lệnh vừa mở.                                                */
+  TRAN_RUI_RO: {
+    TONG_PC: 0.30,              // = đúng ngân sách cũ (3 × $20 / $200)
+    CANH_BAO_CUNG_HUONG_PC: 0.20,   // chỉ KÊU, không chặn
+  },
 
   /* ================= TIỀN — TÍNH BẰNG ĐÔ, KHÔNG PHẢI % =================
      Cố định theo yêu cầu chủ dự án. Không co giãn theo vốn: vốn lên hay
@@ -60,28 +116,118 @@ module.exports = {
   KY_QUY_DCA: 4,                // × 10 → $40.  ⛔ ĐÚNG MỘT LẦN
   SO_LAN_DCA_TOI_DA: 1,         // ⛔ bất biến
 
-  /* Cắt lỗ theo SỐ TIỀN LỖ RÒNG (đã trừ phí, trượt đã nằm trong giá).
-     Tính theo tiền chứ không theo % giá → tự siết lại sau khi DCA:
-       chưa DCA ($60):  −$20 ≈ giá chạy 33% · −$25 ≈ 42%
-       đã DCA ($100):   −$20 ≈ giá chạy 24% · −$25 ≈ 29%                  */
-  CAT_LO_USD: 20,               // cắt sớm nhất
-  CAT_LO_USD_TRAN: 25,          // trần tuyệt đối
+  /* ============ ĐƯỜNG CẮT ĐỘNG — BÁM ĐỈNH, CHỈ ĐI MỘT CHIỀU ============
+     ⛔ ĐÃ BỎ mốc cắt lỗ cố định $20/$25 (chủ dự án chốt 2026-08-23).
+
+     Vì sao bỏ — đo trên 54 lệnh thật của 11 ngày đầu:
+       · $20 trên notional $60 = giá phải chạy 33%
+       · chốt lời nhả ra ở ~0,64% giá (đỉnh trung vị 1,288%, nhả nửa)
+       → mạo hiểm 33% để ăn 0,64%, tỷ lệ 1:50. Phải thắng ~96% mới hoà.
+       · Toàn bộ khoản lỗ −$15,49 đến từ ĐÚNG 2 lệnh chạm mốc $20;
+         52 lệnh còn lại cộng lại +$26,10.
+
+     Nay chỉ còn MỘT đường cắt cho cả lỗ lẫn lãi, đặt cách ĐỈNH GIÁ đã
+     đạt một khoảng K, và KHÔNG BAO GIỜ lùi ra xa:
+
+         K = kẹp( HE_SO_BIEN_DO × biên độ 24h của coin , SÀN , TRẦN )
+
+     Vì sao neo vào biên độ 24h thay vì một số cố định: khoảng cố định
+     theo % thì coin êm bị stop quá rộng, coin loạn bị nhiễu quét sạch.
+     `bienDo24()` đã có sẵn trong `lib/loc-coin.js` — trước nay chỉ dùng
+     để lọc coin, chưa lần nào dùng để định cỡ rủi ro.
+
+     SÀN/TRẦN chọn từ dữ liệu: dựng lại đường giá theo phút của 53 lệnh
+     rồi đo độ sâu đi ngược tối đa của từng lệnh —
+       cắt ở  2% → chạm 19 lệnh, giết oan 13 lệnh lãi (+$4,83)
+       cắt ở  4% → chạm  9 lệnh, giết oan  5 lệnh lãi (+$0,95)
+       cắt ở  6% → chạm  5 lệnh, giết oan  3 lệnh lãi (+$0,73)
+       cắt ở 10% → chạm  3 lệnh, giết oan  1 lệnh lãi (+$0,62)
+     Vùng 3–8% giết oan dưới $1 tiền lãi mà vẫn chặn được CẢ HAI lệnh
+     BEAT (đi ngược −31,9% và −28,1%). Dưới 2% bắt đầu ăn vào lệnh lãi
+     thật, trên 10% thì gần như không còn tác dụng chặn.                  */
+  TRAILING: {
+    HE_SO_BIEN_DO: 0.50,       // K = 0,50 × biên độ 24h
+    KHOANG_SAN: 0.030,         // ⛔ sàn 3,0% giá — hẹp hơn là nhiễu quét
+    KHOANG_TRAN: 0.080,        // ⛔ trần 8,0% giá — không để stop rộng vô hạn
+
+    /* Khoá hoà vốn — đỉnh lãi đạt ngần này LẦN khoảng trailing thì ép
+       đường cắt lên ít nhất bằng giá hoà vốn. Từ đó lệnh KHÔNG THỂ lỗ.
+       Đây là thứ cứu đúng ca đã xảy ra: BEAT lệnh thứ hai từng lãi
+       +1,34% rồi quay đầu về −$20,78 mà không có gì chặn lại. */
+    NGUONG_KHOA_VON: 1.0,
+    DEM_HOA_VON: 2.0,          // hoà vốn = giá vào ± DEM × phí khứ hồi
+  },
+
+  /* ============ MẤT SỔ — LỆNH ĐANG MỞ VẪN PHẢI ĐƯỢC CANH ============
+     ⛔ Vòng lặp 2 giây trong `bot.js` có ba lối `continue` bỏ qua coin khi
+     sổ lệnh chết: quá 20 giây không có gói dữ liệu · `E.so.hong` · sổ
+     rỗng một phía. Trước 2026-08-23 chúng bỏ qua LUÔN cả việc quản lý
+     lệnh ĐANG MỞ — không kiểm đường cắt, không kiểm van cuối, giá chạy
+     bao xa cũng không ai đóng.
+
+     Lỗ hổng đó vốn được ĐƯỜNG CẮT RỘNG che cho: cắt ở 33% giá thì mất sổ
+     vài phút hiếm khi đủ để giá đi hết quãng đó. Đường cắt mới chỉ cách
+     3–8% nên tấm che ấy biến mất — đây là lý do phải vá cùng lượt.
+
+     ⛔ NGUYÊN TẮC: sổ hỏng được phép chặn MỞ LỆNH MỚI và chặn tính tín
+     hiệu. KHÔNG BAO GIỜ được phép chặn ĐÓNG LỆNH.
+
+     Phao cứu là REST ticker (`bangGia`, làm mới mỗi 60 giây) — đường dữ
+     liệu ĐỘC LẬP với WebSocket nên hai bên khó chết cùng lúc.           */
+  MAT_SO: {
+    /* Ticker cũ hơn mức này thì KHÔNG tin nữa. Thà không có giá còn hơn
+       quyết định đóng lệnh dựa trên một con số đã lỗi thời. */
+    TUOI_TICKER_TOI_DA_MS: 180000,   // 3 phút = 3 vòng quét hụt liên tiếp
+    /* Đóng lệnh lúc không nhìn thấy sổ thì gần như chắc chắn khớp xấu.
+       Phạt trượt hẳn một khoản — cùng tinh thần "cố ý bi quan". */
+    TRUOT_DONG_MU: 0.010,            // 1% giá
+    /* Mất sổ lâu hơn mức này mà đang có lệnh mở thì kêu, và kêu lặp lại
+       theo chu kỳ này chứ không kêu mỗi 2 giây. */
+    CANH_BAO_SAU_MS: 60000,
+  },
+
+  /* ⛔ VAN AN TOÀN CUỐI — KHÔNG phải cơ chế cắt lỗ chính.
+     Trailing 3–8% trên notional $60 = tối đa −$4,80 (sau DCA $100 là
+     −$8,00), nên mốc này gần như không bao giờ chạm. Nó tồn tại cho
+     trường hợp giá NHẢY QUA đường cắt (gap) chứ không phải để cắt lệnh
+     thường. Hạ từ $25 xuống $12 vì cỡ lỗ thiết kế đã nhỏ đi 4–6 lần. */
+  LO_TRAN_USD: 12,
 
   /* --- DCA: hàng rào KHÁC căn cứ ---
-     CUA_SO_DCA_USD chỉ nói ĐƯỢC PHÉP hay không. Nó KHÔNG BAO GIỜ tự kích
-     hoạt DCA. Lý do bấm nút duy nhất là RÀO CHẮN + đà đuối (xem lib/lenh.js).
-     Phần lớn lệnh thua sẽ không bao giờ được DCA — đó là đúng, không phải lỗi. */
-  CUA_SO_DCA_USD: [4, 10],
+     Cửa sổ chỉ nói ĐƯỢC PHÉP hay không. Nó KHÔNG BAO GIỜ tự kích hoạt
+     DCA. Lý do bấm nút duy nhất là RÀO CHẮN + đà đuối (xem lib/lenh.js).
+     Phần lớn lệnh thua sẽ không bao giờ được DCA — đó là đúng, không phải lỗi.
+
+     ⛔ ĐO BẰNG TỶ LỆ TRÊN RỦI RO THIẾT KẾ, không bằng đô (đổi 2026-08-23).
+     Bản cũ là `[$4, $10]` cứng, hợp lý khi mức cắt luôn là $20 — tức
+     cửa sổ nằm ở 20%–50% quãng đường tới điểm cắt. Nhưng đường cắt nay
+     chỉ còn 3–8% giá = $1,80–$4,80 trên notional $60, nên cửa sổ đô cũ
+     nằm NGOÀI tầm với: lệnh bị đóng trước khi kịp lỗ tới $4 và DCA sẽ
+     chết âm thầm mà không ai biết. Giữ nguyên tỷ lệ 20%–50% thì hành vi
+     tương đương bản cũ, và tự co giãn theo từng coin.                   */
+  CUA_SO_DCA_TY_LE: [0.20, 0.50],
   RAO_CHAN_TOI_THIEU: 45,       // phút mua liên tục để xuyên tới điểm cắt
 
-  /* --- Chốt lời: KHÔNG có mốc cố định ---
+  /* --- Chốt lời theo cò đảo chiều — GIỮ cơ chế, siết hai chỗ ---
      Chốt khi: tín hiệu đảo chiều đã nổ (gài báo động) VÀ hồi lại ≥ ngưỡng.
        ngưỡng = min( max(HOI_LAI_TOI_THIEU, HOI_LAI_TY_LE × đỉnh), HOI_LAI_TRAN × đỉnh )
-     max(...) chặn bị đá ra bởi nhiễu vặt;
-     min(..., TRAN) chặn lệnh thắng nhỏ trôi về gần 0.                     */
+
+     ⭐ SIẾT 1 — `HOI_LAI_TRAN` 0,50 → 0,35.
+        Đo được: 47/54 lệnh có đỉnh dưới 10%, mà ở vùng đó công thức luôn
+        rơi về `0,50 × đỉnh` → bot LUÔN trả lại đúng một nửa. Tổng đỉnh
+        lãi của 54 lệnh là +$71,56 nhưng về đích −$15,49: đã trả lại thị
+        trường $87,05. Hạ trần xuống 0,35 thì giữ 65% thay vì 50%.
+
+     ⭐ SIẾT 2 — `SAN_CHOT_LOI_PC`: đỉnh lãi chưa vượt mức này thì CẤM
+        chốt lời. `pnlPcGia` đo giá GỘP, chưa trừ phí; phí khứ hồi
+        = 2 × PHI_MOI_LAN = 0,12% giá. Chốt giữ lại nửa đỉnh, nên đỉnh
+        dưới 0,24% thì chốt CHẮC CHẮN ra số âm — không phải xui, là toán.
+        7/54 lệnh đã dính đúng vậy, và 17 lệnh đóng bằng `chot_loi` mà
+        PnL âm. Dưới sàn này lệnh cứ để chạy, đã có đường trailing lo. */
+  SAN_CHOT_LOI_PC: 0.0024,      // = 2 × phí khứ hồi = 2 × 2 × PHI_MOI_LAN
   HOI_LAI_TOI_THIEU: 5,         // điểm phần trăm
   HOI_LAI_TY_LE: 0.25,
-  HOI_LAI_TRAN: 0.50,
+  HOI_LAI_TRAN: 0.35,
 
   /* --- Cổng thanh lý --- */
   DEM_THANH_LY_TOI_THIEU: 1.5,
@@ -198,7 +344,8 @@ module.exports = {
        liên tục, mà mỗi lần tắt là mất sạch lịch sử tường đã tích. */
     NOI_LONG_KHI_DA_THEO: 1.5,
 
-    /* Trọng số XẾP HẠNG — chỉ có tác dụng khi SO_COIN_TRAN bị chạm.
+    /* Trọng số XẾP HẠNG — chỉ có tác dụng khi TRẦN RAM bị chạm (từ
+       2026-08-23; trước đó là khi `SO_COIN_TRAN` bị chạm).
        Không ảnh hưởng quyết định vào lệnh, nên chỉnh thoải mái. */
     DIEM_SHORT_A: 200, DIEM_LONG_A: 150, DIEM_LONG_B: 150,
     DIEM_NEN_HE_SO: 10,        // coin trong vùng tiền-setup: luôn thua coin đã đủ

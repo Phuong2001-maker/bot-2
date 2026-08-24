@@ -26,7 +26,7 @@ Trong repo này bạn là **Kiến trúc sư Hệ thống kiêm Quant giao dịc
 npm test
 ```
 
-202 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
+263 phép kiểm bất biến. **Đỏ thì dừng lại, đừng chạy bot, đừng báo hoàn thành.**
 Nếu test đỏ vì bạn cố ý đổi hành vi thì phải **sửa test và giải thích tại sao test cũ sai** — không được xoá test cho qua.
 
 **2. Cập nhật file này NGAY trong cùng lượt làm việc, trước khi báo hoàn thành.**
@@ -48,19 +48,25 @@ Lý do không phải là thẩm mỹ: **số rải trong code thì không ai ch�
 Những điều này là **quyết định của chủ dự án**, không phải tham số kỹ thuật. Đừng "cải tiến" chúng.
 
 **1. Lệnh đã mở chỉ có ĐÚNG BA đường ra:**
-- lỗ ròng chạm **−$20** (được ôm tới **−$25** CHỈ KHI rào chắn còn dày)
-- **CHỐT LỜI**: cò đảo chiều đã gài báo động **VÀ** hồi lại ≥ ngưỡng
+- **TRAILING**: giá chạm đường cắt. Đường này cách **đỉnh giá đã đạt** một khoảng `K = kẹp(0,50 × biên độ 24h, 3%, 8%)` và **chỉ đi một chiều**. Van cuối `LO_TRAN_USD = $12` chỉ để chặn giá **nhảy qua** đường cắt.
+- **CHỐT LỜI**: cò đảo chiều đã gài báo động **VÀ** hồi lại ≥ ngưỡng **VÀ** đỉnh lãi đã vượt **sàn phí**
 - người tạo `DUNG.flag`
+
+  ⛔ **Sổ lệnh hỏng được phép chặn MỞ lệnh mới. KHÔNG BAO GIỜ được chặn ĐÓNG lệnh.** Mất sổ thì lệnh đang mở chuyển sang **canh mù** bằng giá REST (`canhLenhMu`) — vẫn kiểm đường cắt, vẫn kiểm van cuối. Mất cả sổ lẫn ticker thì **kêu to**, không đoán giá.
 
   **Không đóng vì:** hết giờ · cấu trúc gãy · funding đảo · `S` đổi dấu · ra khỏi khung giờ. Những thứ đó **chỉ được vẽ ⚠**. Thấy `_dong()` thứ tư trong `_xuLyDCA` hay `_canhBao` là LỖI.
 
 **2. TIỀN TÍNH BẰNG ĐÔ, KHÔNG PHẢI %.** Vốn $200 · vào **$6×10** · DCA **$4×10** · **DCA ĐÚNG MỘT LẦN**. Size không co giãn theo vốn → vốn về 0 hay âm cũng không hỏng công thức.
 
-**3. Cắt lỗ tính bằng SỐ TIỀN LỖ RÒNG**, không theo % giá. Nhờ vậy nó tự siết lại sau khi DCA: chưa DCA ($60) thì −$20 ≈ giá chạy 33%; đã DCA ($100) thì −$20 ≈ 24%.
+**3. ⛔ ĐƯỜNG CẮT KHÔNG BAO GIỜ LÙI RA.** Mọi phép gán `L.giaCat` phải đi qua `_dayGiaCat()` — hàm này chỉ nhận giá trị siết vào. Có phép kiểm quét mã nguồn bắt việc gán thẳng. Đây là thứ 2 lệnh BEAT không có, và đó là toàn bộ khoản lỗ của 11 ngày đầu.
 
-**4. DCA phải CÓ CĂN CỨ.** Số tiền lỗ chỉ là **HÀNG RÀO** ($4–$10 = được phép xét), **KHÔNG BAO GIỜ** là lý do. Lý do duy nhất: **rào chắn ≥ 45 phút** + đà đuối + không squeeze. **Phần lớn lệnh thua sẽ không bao giờ được DCA — đó là ĐÚNG, không phải lỗi.**
+  **Khoảng cách `K` chốt tại lúc vào lệnh và giữ nguyên suốt đời lệnh.** Không tính lại mỗi nhịp: biên độ 24h nhích liên tục, để `K` co giãn thì đường cắt sẽ **nới ra** đúng lúc thị trường loạn lên — đúng lúc không được phép nới.
 
-**5. Chốt lời KHÔNG có mốc cố định.** Ba cơ chế: lãi vượt đỉnh → **gỡ** báo động; cò đảo nổ khi đang lãi → **gài** báo động; đã gài **VÀ** hồi ≥ `min(max(5, 25%×đỉnh), 50%×đỉnh)` → chốt. Cò đảo nổ lúc **đang lỗ thì KHÔNG đóng**.
+**4. DCA phải CÓ CĂN CỨ.** Số tiền lỗ chỉ là **HÀNG RÀO** (20–50% quãng đường tới đường cắt = được phép xét), **KHÔNG BAO GIỜ** là lý do. ⛔ Hàng rào này đo bằng **TỶ LỆ**, không bằng đô — xem bảng bẫy. Lý do duy nhất: **rào chắn ≥ 45 phút** + đà đuối + không squeeze. **Phần lớn lệnh thua sẽ không bao giờ được DCA — đó là ĐÚNG, không phải lỗi.**
+
+**5. Chốt lời KHÔNG có mốc cố định.** Ba cơ chế: lãi vượt đỉnh → **gỡ** báo động; cò đảo nổ khi đang lãi → **gài** báo động; đã gài **VÀ** hồi ≥ `min(max(5, 25%×đỉnh), 35%×đỉnh)` → chốt. Cò đảo nổ lúc **đang lỗ thì KHÔNG đóng**.
+
+  ⭐ **SÀN PHÍ.** Đỉnh lãi chưa vượt `SAN_CHOT_LOI_PC` (= 2 × phí khứ hồi = 0,24% giá) thì **cấm chốt lời**. `pnlPcGia` đo giá **gộp**, chưa trừ phí; chốt giữ lại chưa tới nửa đỉnh nên dưới mức đó đóng lệnh **chắc chắn ra số âm** — toán học, không phải xui. Dưới sàn cứ để chạy, đường trailing vẫn đang canh.
 
 **6. Tường quyết định giá RA, KHÔNG quyết định giá VÀO.** Giá vào = giá thị trường ± trượt. Lệnh chờ ở tường sinh **thiên lệch sống sót** — chỉ khớp khi giá đã đi ngược lại phía mình.
 
@@ -91,12 +97,12 @@ Những điều này là **quyết định của chủ dự án**, không phải
 | Chế độ | **`giay`** — ghi DB, **không đặt lệnh thật**, không cần API key |
 | Lưu trữ | **MySQL** `buwsofujhosting_coin_db_v1` trên hosting (6 bảng đã tạo) |
 | Tên miền | `k7m2coin.hiteckqualityconstruction.com.au` → `103.75.186.15` |
-| Đã chạy thật | 3 coin OKX, sổ live, RAM ~72MB ổn định — ⚠ mốc RAM này ĐO Ở 3 COIN, nay đã nới lên 12, **chưa đo lại** |
+| Đã chạy thật | 11,3 ngày liên tục, 20 coin, **54 lệnh**, 311.513 nhịp. RAM **357,68 MB** trên trần tài khoản **2 GB** (đo 23/08 ở bảng điều khiển hosting) → ~15 MB/coin |
 | Giờ giấc | **24/24 tuyệt đối** — không còn cổng giờ nào, kể cả vùng cấm |
-| Test | **202/202 đạt** |
+| Test | **263/263 đạt** |
 | Coin theo dõi | **động** — kết quả của `LOC_COIN`, không phải số đặt trước. Đo thật 12/08: 427 SWAP → 50 qua thanh khoản → **6 qua lọc xu hướng**; 27 coin bị loại vì đi ngang |
-| Trần coin | **20** (`SO_COIN_TRAN`) — van an toàn hạ tầng, KHÔNG phải chỉ tiêu |
-| Lệnh mở tối đa | **3** (`SO_LENH_MO_TOI_DA`) — ⛔ cần gạt RỦI RO, **không** nới theo coin |
+| Trần coin | **BỎ** (`SO_COIN_TRAN: null`) — thay bằng **trần RAM** 1000/1200 MB trên máy 2 GB. ⚠ Nhưng ràng buộc thật là **bộ lọc xu hướng** (`loc=11/20`), không phải trần: bỏ trần chỉ đưa lên ~15–25 coin |
+| Lệnh mở tối đa | **BỎ** (`SO_LENH_MO_TOI_DA: null`) — thay bằng **ngân sách rủi ro** `TRAN_RUI_RO.TONG_PC = 30%` vốn (= đúng ngân sách cũ 3 × $20) |
 | Lệnh đã mở | **0** — nhưng **đường `SAN → CHO_VAO` ĐÃ CHẠY THẬT** (KORU, 12/08 10:47, LONG-A, giữ 1h41). Đoạn `CHO_VAO → MỞ → ĐÓNG` vẫn chưa lần nào chạy |
 | Chạy lâu nhất | **9,27 giờ liên tục** (12/08, 01:17→10:34 giờ VN) · 1.671 nhịp · 7 coin · **0 lệnh** |
 | Nút thắt đã đo | Không phải khung giờ, không phải `S`. Là **điều kiện COIN của setup** + **cò dẫn**. SHORT-A/SHORT-B/LONG-B đạt **0/1671** nhịp; LONG-A đạt 141 (8,4%) nhưng không nhịp nào trùng lúc cò LONG nổ |
@@ -147,21 +153,24 @@ du-lieu/             bot.log · bot.pid  (đã .gitignore)
 
 | Nhóm | Chứa gì | Sửa khi nào |
 |---|---|---|
-| *(gốc)* | Vốn · $6/$4 · cắt lỗ $20/$25 · DCA · hồi lại | Chủ dự án đổi cách chơi |
+| *(gốc)* | Vốn · $6/$4 · `TRAILING` · van cuối · sàn phí · DCA · hồi lại | Chủ dự án đổi cách chơi |
 | `SETUP` | 4 setup: điều kiện COIN + `khungGoc` (**nhãn**, không chặn) | Chủ dự án đổi cách chơi |
 | `TUONG` ⭐ | **Chấm điểm lệnh ảo**: ±15/+8/−30, ngưỡng gần/rời, `numOrders` | Sau ≥300 lệnh, có số liệu |
 | `TIN_HIEU` | Trọng số `S`, chuẩn hoá dòng tiền/OI/funding, cò chốt lời | Sau ≥780 lệnh — **đừng chỉnh sớm** |
 | `LOC_COIN` ⭐ | **Bộ lọc coin**: biên độ 24h tối thiểu, đệm tiền-setup, trễ, trọng số xếp hạng | Đọc `loc=A/B` trong log trước đã |
 | `QUET` | Máy quét, nến từ chối, chế độ BTC, vùng đệm coin | Khi thấy chọn coin sai |
 | `DCA` | Ba căn cứ: đà chậm lại · OI đứng · ngưỡng squeeze | |
+| `MAT_SO` ⭐ | **Canh lệnh khi sổ chết**: tuổi ticker tối đa, phạt trượt đóng mù, chu kỳ kêu | Khi đổi độ rộng đường cắt |
 | `CANH_BAO` | Ngưỡng vẽ ⚠ — **không đụng tới quyết định** | Tuỳ ý |
 | `HA_TANG` | Ping, timeout, **gom `subscribe`**, trần hàng đợi, xoay log | Khi hạ tầng có vấn đề |
 
-⛔ **Số coin theo dõi và `SO_LENH_MO_TOI_DA` là HAI quyết định, không phải một.**
+⛔ **Số coin theo dõi và trần lệnh mở là HAI quyết định, không phải một.** Từ 2026-08-23 **cả hai đều bỏ trần ĐẾM**, mỗi bên thay bằng đúng thứ nó tiêu: coin → **RAM**, lệnh → **rủi ro**.
 
 **Coin theo dõi = cần gạt lấy mẫu.** Không còn là một con số nữa: nó là **kết quả của `LOC_COIN`**. Quan sát thêm coin không tốn xu nào, chỉ tốn RAM/CPU/băng thông. `SO_COIN_TRAN` chỉ là van an toàn hạ tầng — chạm trần nghĩa là **cơ hội nhiều hơn sức máy**, không phải "đã theo dõi đủ".
 
-**Lệnh mở = cần gạt rủi ro.** Lỗ đồng thời tối đa = `N × CAT_LO_USD`, và các alt tương quan gần 1 nên N lệnh ≈ **1 lệnh cỡ N×**; N lệnh tương quan cũng chỉ đáng ~1–2 lệnh độc lập khi đếm cỡ mẫu. Nới nhầm cái này vừa tăng rủi ro vừa **hỏng phép đo**.
+**Lệnh mở = cần gạt rủi ro.** Nay đo bằng **ngân sách rủi ro** chứ không bằng số đếm: tổng **rủi ro còn lại** của mọi lệnh đang mở ≤ `TRAN_RUI_RO.TONG_PC × vốn`. "Rủi ro còn lại" = số tiền sẽ mất **nếu chạm đường cắt**, nên lệnh đã **khoá hoà vốn thì chiếm 0 ngân sách** và trả lại chỗ cho lệnh mới. Cùng 30% vốn như cũ nhưng mua được 12–33 lệnh thay vì 3, vì mỗi lệnh nay rẻ hơn 4–10 lần.
+
+⚠ **Ngân sách rủi ro KHÔNG bắt được tương quan.** N lệnh long trên N alt lúc BTC sập không phải N lệnh, đó là **1 lệnh cỡ N×**; và N lệnh tương quan chỉ đáng ~1–2 lệnh độc lập khi đếm cỡ mẫu. Đo thật: **53/54 lệnh là LONG**. Nên có cảnh báo `TAP TRUNG LONG/SHORT` trong log — **chỉ kêu, không chặn** (quyết định của chủ dự án).
 
 ⚠ **Nhóm `TUONG` và `TIN_HIEU` chưa từng được kiểm chứng bằng dữ liệu thật.** Đừng chỉnh vì "trông có vẻ hợp lý hơn" — đó chính là vòng lặp đã đẻ ra 4 chốt chặn hỏng ở dự án cũ.
 
@@ -201,7 +210,7 @@ Cò SHORT cần đủ **cả bốn**: `BPR ≥ 0,25` · `BPR ≥ 2×BFR` · `dDB
 - **Tỷ lệ thắng trần trụi là con số dối nhất trong hệ thống này.** Mốc so sánh đúng là `baseline = d_cắt / (d_chốt + d_cắt)` — với giá đi ngẫu nhiên, đó chính là xác suất chạm chốt lời trước. **Thắng 60% khi baseline 65% nghĩa là bot tệ hơn tung đồng xu.**
 - **Cỡ mẫu.** Phân biệt 55% với 50% cần **~780 lệnh độc lập**. Dưới 100 lệnh **chỉ được kiểm lỗi thô**, tuyệt đối không chỉnh trọng số.
 - **Đừng lặp lại vòng lặp chết người của dự án cũ:** chỉnh trọng số sau vài chục kèo → đẻ ra 4 chốt chặn → rồi chính chúng bị nghi là **cắt mất lệnh thắng**.
-- **`R` có mẫu số cố định** `= CAT_LO × (TRAN_KHI_LO × vốn × đòn bẩy) = $13,20`. Một lệnh cắt lỗ sạch luôn ra **≈ −1,00R**. Thấy −1,5R là có gì sai (trượt quá lớn / gap qua stop).
+- **`R` có mẫu số là RỦI RO THIẾT KẾ CỦA CHÍNH LỆNH ĐÓ** (`khoang_trailing × notional`, ghi sẵn ở cột `lo_thiet_ke_usd`). Trước 2026-08-23 mẫu số là hằng số $20; nay đường cắt rộng hẹp theo từng coin nên mẫu số phải đi theo, không thì R của coin êm và coin loạn không so được với nhau. Bất biến giữ nguyên: lệnh chạm đường cắt sạch vẫn ra **≈ −1,00R**. Thấy −1,5R là gap qua đường cắt hoặc trượt quá lớn.
 - **NULL ≠ 0.** Thiếu dữ liệu ghi `NULL` + cờ `co_*` = false. Ghi 0 cho cả hai là dạy mô hình sau này rằng "không có tin gì" giống "tin trung lập".
 
 ---
@@ -220,6 +229,8 @@ Cò SHORT cần đủ **cả bốn**: `BPR ≥ 0,25` · `BPR ≥ 2×BFR` · `dDB
 | Cộng dồn dòng tiền **có dấu** | `f30 = 0` lẫn lộn "chợ chết" với "hai phe đánh nhau ngang cơ" — hai trạng thái ngược nhau. Phải tách **gross** mua/bán |
 | Trượt giá tính hai lần | `_khop()` trả về **giá đã xấu đi**, nên trượt tự nằm trong PnL. `truot_usd` **chỉ để báo cáo**. Chỉ **phí** mới trừ tường minh |
 | Hai bot chạy cùng lúc = hai tiến trình ghi một DB | `EADDRINUSE` đã có thông báo rõ + thoát sạch |
+| **Sổ lệnh chết → lệnh đang mở bị bỏ rơi** | Vòng lặp 2 giây có ba lối `continue` (quá 20s không có gói · `E.so.hong` · sổ rỗng một phía) nằm **trước** `QL.capNhat()`, nên bỏ qua luôn cả lệnh đang mở. Đo thật: **19/08 01:35→01:40, 6 phút, 20/20 coin mất sổ, WS im, 3 lệnh đang mở** — vốn đứng nguyên $178,12 và bộ đếm ghi đứng nguyên 770236, tức `capNhat()` không chạy lần nào. Cộng **10.333 lần** `so lenh hong` (đồng bộ định kỳ 30 phút × 20 coin × 11 ngày). Đường cắt 33% cũ **che** cho lỗ hổng này; đường cắt 3–8% thì không. Nay có nhánh **canh mù** bằng giá REST |
+| **Siết cắt lỗ mà quên các ngưỡng ĐO BẰNG ĐÔ ăn theo nó** | Cửa sổ DCA `[$4,$10]` hợp lý khi mức cắt luôn là $20. Khi đường cắt còn $1,80–$4,80 thì cửa sổ đó nằm **ngoài tầm với** → DCA **chết âm thầm**, không lỗi, không log. Nay đo bằng **tỷ lệ** trên rủi ro thiết kế. Đổi mức cắt thì phải rà **mọi** hằng số đô ăn theo: cửa sổ DCA · `RAO_CHAN_TOI_THIEU` · mẫu số R · cổng thanh lý |
 
 ---
 
@@ -271,6 +282,16 @@ ALTER TABLE tin_hieu
   ADD COLUMN co_short TINYINT, ADD COLUMN co_long TINYINT;
 ```
 
+**Thêm 2026-08-23** — hai cột của đường cắt trailing:
+
+```sql
+ALTER TABLE lenh
+  ADD COLUMN khoang_trailing DOUBLE,
+  ADD COLUMN lo_thiet_ke_usd DOUBLE;
+```
+
+Thiếu `lo_thiet_ke_usd` thì `r_multiple` của lệnh mới **không tính được** và `npm run bao-cao` đọc ra số vô nghĩa.
+
 Kiểm lại:
 
 ```sql
@@ -290,6 +311,10 @@ Mỗi lần sửa code phải thêm một dòng ở đây, **trong cùng lượt
 
 | Ngày | Việc | Lý do |
 |---|---|---|
+| 2026-08-23 | 🔧 **Hạ trần RAM 1200/1350 → 1000/1200 sau khi ĐO server thật** | Chủ dự án đưa ảnh bảng điều khiển hosting: trần tài khoản **2 GB** (CloudLinux LVE), bot đang dùng **357,68 MB** ở 20 coin → **~15 MB/coin** + nền Node ~60 MB. Con số 1200/1350 đặt trước đó là **đoán khi chưa biết RAM server**, chỉ chừa 700 MB đệm — quá mỏng cho hosting chia sẻ, nơi chạm trần là bị **giết thẳng, không swap, không ân hạn**, trong khi Node dọn rác lười nên RSS vọt lên trước khi GC chạy. Bot chết = **không ai canh lệnh đang mở**, đúng lỗ hổng vừa vá. Nay 1000/1200 ≈ 63 coin, chừa hơn 1 GB đệm. Thêm `RAM_MAY_CHU_MB: 2048` để **khai báo** RAM máy chủ thay vì để code đoán, kèm phép kiểm bắt mức xả ≤ 65% RAM máy chủ — lần sau ai nâng trần cho "theo dõi nhiều coin hơn" sẽ bị chặn. ⚠ Ghi nhận kèm: RAM **sẽ không chạm trần** trong thực tế — log cho thấy `loc=11/20`, tức **bộ lọc xu hướng** mới là thứ quyết định số coin (10–13), không phải trần. Bỏ trần đếm 20 chỉ đưa lên ~15–25 coin ≈ 400–450 MB; thứ thật sự mở khoá cơ hội là bỏ **trần lệnh**, không phải trần coin. Đo thêm từ bảng điều khiển: CPU 10,46/200 · đĩa 230 MB/10 GB · processes 11/100 — **RAM là ràng buộc duy nhất**. ⚠ Đĩa: bảng `nhip` không có cơ chế xoá cũ, tích ~610 MB/tháng ở 20 coin → 10 GB đầy sau ~16 tháng. **263/263 đạt** |
+| 2026-08-23 | ⭐ **BỎ TRẦN ĐẾM ở CẢ HAI cần gạt — thay bằng RỦI RO và RAM** | Chủ dự án chốt: trần hiện tại đang **cắt mất cơ hội có lãi**. Đo thật khớp: trần 3 lệnh khoá bot **29,3% thời gian**, và **37/71** lần vào SẴN_SÀNG không bao giờ mở được lệnh. **Lệnh mở:** `SO_LENH_MO_TOI_DA` 3 → `null`, thay bằng `TRAN_RUI_RO.TONG_PC = 30%` vốn — **đúng bằng ngân sách cũ** (3 × $20 / $200). Vì đường cắt trailing chỉ 3–8% nên rủi ro mỗi lệnh còn $1,80–$4,80: cùng số tiền đó nay mua được **12–33 lệnh thay vì 3**. Ngân sách đo bằng **rủi ro CÒN LẠI** (PnL tại đường cắt), không phải rủi ro lúc mở → lệnh **đã khoá hoà vốn chiếm 0 ngân sách** và trả lại chỗ. ⚠ Trần rủi ro **không** bắt được tương quan (53/54 lệnh là LONG) nên thêm cảnh báo `TAP TRUNG LONG/SHORT` — chỉ kêu, không chặn. **Coin theo dõi:** `SO_COIN_TRAN` 20 → `null`, thay bằng `RAM_TRAN_MB` — RAM mới là thứ việc theo dõi thêm coin thật sự tiêu. Vượt `RAM_XA_BOT_MB` thì **gỡ bớt** coin chứ không chỉ ngừng thêm, vì bot bị OOM kill là **không ai canh lệnh đang mở** (đúng lỗ hổng vừa vá). Coin đang có lệnh mở vẫn miễn nhiễm khỏi việc gỡ. ⚠ `RAM_TRAN_MB = 1200` là **ước lượng** từ mốc đo 20 coin → 380MB (~19MB/coin); **phải kiểm `free -m` trên server rồi chỉnh**. Kèm theo, làm nốt việc đã treo từ đầu: **mọi lối chặn mở lệnh nay đều ghi sự kiện** (`chan_ngat_mach` · `chan_tran_dem_lenh` · `chan_tran_rui_ro` · `chan_cong_thanh_ly`) — trước đây hai lối đầu là `return` trần, không log, không dấu vết, nên DB không giải thích nổi vì sao 37 lần SẴN_SÀNG không vào được lệnh. **261/261 đạt** (trước 244) |
+| 2026-08-23 | ⛔ **VÁ LỖ HỔNG: sổ lệnh chết thì lệnh đang mở KHÔNG AI CANH** | Chủ dự án hỏi đúng chỗ: *"một ngày nào đó coin nào đó ngược hướng nó lại thanh lý tài khoản"*. Truy ra `bot.js` có **ba lệnh `continue`** nằm TRƯỚC `QL.capNhat()` — sổ quá 20s không có gói · `E.so.hong` · sổ rỗng một phía — nên khi sổ chết thì lệnh đang mở **không được kiểm đường cắt, không được kiểm van cuối**, giá chạy bao xa cũng không ai đóng. Lỗ hổng **có từ trước**, nhưng trước nay được **đường cắt rộng che cho**: cắt ở 33% giá thì mất sổ vài phút hiếm khi đủ để giá đi hết quãng đó. Đường cắt mới chỉ 3–8% nên tấm che biến mất → phải vá cùng lượt. **Đo thật trong log 11 ngày:** 19/08 01:35→01:40 **6 phút liền, 20/20 coin mất sổ, WS im, ĐANG CÓ 3 LỆNH MỞ** — vốn đứng nguyên $178,12 và bộ đếm ghi DB đứng nguyên 770236, chứng minh `capNhat()` không chạy lần nào; tổng 8 phút "0 sổ live" trong đó 6 phút có lệnh mở; thêm **10.333 lần** `so lenh hong` từ đồng bộ định kỳ. **Cách vá:** thêm `canhLenhMu()` — sổ chết thì lệnh đang mở vẫn được canh bằng **giá REST ticker** (`bangGia`, làm mới mỗi 60 giây, đường dữ liệu ĐỘC LẬP với WebSocket). Chỉ chạy hai đường ra bảo vệ vốn; **không** chạy chốt lời (cò đảo chiều cần sổ mới tính được), **không** mở lệnh mới, **không** DCA. Ticker cũ hơn 3 phút thì không tin → báo `khong_co_gia` và **kêu to** thay vì đoán. Đóng mù bị **phạt trượt 1%** (`_khopMu`) — nhánh cũ để `truotPc: 0`, tức giả định khớp hoàn hảo đúng vào lúc thị trường tệ nhất. Logic đường cắt tách thành `_capNhatDuongCat()` **dùng chung** cả hai nhánh, có phép kiểm bắt việc chép ra hai bản. **244/244 đạt** (trước 226) |
+| 2026-08-23 | ⭐ **BỎ CẮT LỖ CỐ ĐỊNH $20/$25 — thay bằng ĐƯỜNG TRAILING BÁM ĐỈNH** | Chủ dự án chốt sau khi đọc dump 11,3 ngày (54 lệnh, 311.513 nhịp). Ba con số buộc phải đổi: (1) **tỷ lệ 1:50** — cắt lỗ $20/$60 = giá chạy **33%**, còn chốt lời nhả ra ở **0,64%** giá (đỉnh trung vị 1,288%, công thức cũ trả lại đúng nửa) → phải thắng ~96% mới hoà, thực tế thắng 64,8%; (2) toàn bộ khoản lỗ **−$15,49** đến từ **đúng 2 lệnh BEAT** chạm mốc $20, 52 lệnh còn lại cộng lại **+$26,10**; (3) tổng đỉnh lãi **+$71,56** về đích **−$15,49** — đã **trả lại thị trường $87,05**. Nay chỉ còn MỘT đường cắt cách **đỉnh giá** một khoảng `K = kẹp(0,50 × biên độ 24h, 3%, 8%)`, **chỉ đi một chiều**, cộng **khoá hoà vốn** khi lãi đạt 1×K (cứu đúng ca BEAT #2: từng lãi +1,34% rồi về −$20,78). Sàn/trần chọn bằng **dữ liệu** chứ không đoán: dựng lại đường giá theo phút của 53/54 lệnh rồi đo độ sâu đi ngược — cắt ở 2% giết oan 13 lệnh lãi (+$4,83), ở 6% chỉ giết oan 3 lệnh (+$0,73) mà vẫn chặn được cả 2 lệnh BEAT (−31,9% và −28,1%). Chốt lời **giữ cơ chế cò** nhưng siết hai chỗ: `HOI_LAI_TRAN` 0,50→**0,35** (47/54 lệnh có đỉnh <10% nên luôn rơi vào nhánh này) và thêm **SÀN PHÍ** `SAN_CHOT_LOI_PC = 0,24%` (17 lệnh đóng bằng `chot_loi` mà PnL âm; 7 lệnh có đỉnh dưới 2× phí khứ hồi → chốt ở đó **không thể** dương). ⚠ Kèm hai hệ quả dây chuyền suýt lọt: **cửa sổ DCA `[$4,$10]`** nằm ngoài tầm với khi lỗ tối đa chỉ còn $1,80–$4,80 → đổi sang **tỷ lệ** `[0,20 ; 0,50]` × rủi ro thiết kế; **mẫu số R** đổi từ hằng số $20 sang `lo_thiet_ke_usd` của từng lệnh. `RAO_CHAN_TOI_THIEU` giữ 45 phút và vẫn đo tới **van cuối** chứ không tới đường trailing — đo tới đường trailing thì số phút tụt hơn chục lần và DCA chết âm thầm lần nữa; đổi lại DCA sẽ nổ **thưa hơn**, chưa hiệu chỉnh lại bằng dữ liệu. Thêm 2 cột `khoang_trailing` · `lo_thiet_ke_usd`. **226/226 đạt** (trước 205) |
 | 2026-08-12 | 🧹 **Xoá nốt khối `ALTER` còn lại + quét code chết** | Chủ dự án dọn cho sạch. Kiểm lại thì **cả 10 dòng `ALTER` còn sót** (`lenh` × 6, `lan_vao` × 4) **đã nằm sẵn trong `CREATE TABLE`** → với DB mới chúng không bao giờ chạy, chỉ tốn 10 truy vấn `information_schema` mỗi lần khởi động. Nay `khoiTao()` chỉ còn chạy DDL. Quét thêm code chết trong 13 file: 6 khoá config + 9 hàm export không ai gọi — **tất cả đều có TỪ TRƯỚC**, không phải rác của đợt sửa này; phần lớn là nền cho Giai đoạn 10 (`KY_QUY` · `SO_LAN_THU_IOC` · `NGAT_MACH.lechSoDuToiDa`) hoặc khai báo bất biến (`DONG_VI_TIN_HIEU_NGUOC` · `CO_CHOT_CHI_KHI_LAI`) → **giữ nguyên**. ⚠ Kèm sự cố: một lệnh `Get-Content \| Set-Content -Encoding utf8` trong PowerShell 5.1 đã **làm hỏng mã hoá toàn bộ `CLAUDE.md`** (UTF-8 đọc nhầm thành ANSI rồi ghi lại) — đã đảo ngược và kiểm sạch. **Từ nay sửa file tiếng Việt bằng Edit/Write, KHÔNG dùng đường ống PowerShell.** **205/205 đạt** |
 | 2026-08-12 | **Bỏ `ALTER` tự động + thêm `server/schema.sql` sinh tự động** | Chủ dự án chốt tự chạy SQL bằng tay cho sạch, DB cũ đã xoá làm lại. Cột đo cò chuyển vào thẳng `CREATE TABLE`. ⚠ Việc này **mở lại đúng cái bẫy** ghi ở bảng trên (`CREATE TABLE IF NOT EXISTS` bỏ qua bảng cũ trong im lặng) nên phải bù bằng hai thứ: (a) `cong-cu/xuat-schema.js` sinh `server/schema.sql` **từ `lib/db.js`**, không chép tay; (b) phép kiểm so hai bên — thêm cột vào `db.js` mà quên `npm run xuat-schema` là **test đỏ**, thay vì DB tạo mới thiếu cột rồi bot ghi lỗi âm thầm. **205/205 đạt** |
 | 2026-08-12 | 🔍 **Đọc dump 11,17h + vá MÙ ĐO LƯỜNG ở cò LONG** | Dump mới (2.013 nhịp, 8 coin, 12:28): **lần đầu tiên có `CHO_VAO`** — KORU vào SẴN SÀNG lúc 10:47 (LONG-A, S=26), giữ **101 nhịp = 1h41**, có 1 lần `troi_gia_tinh_lai` (18,965→18,675) đúng bất biến 8. Vẫn 0 lệnh. ⚠ Dump này chạy bằng **code CŨ** (nhãn `NGOAI_KHUNG`, 3 coin) — **không phản ánh thay đổi nào của hôm nay**. Phát hiện chính khi truy vì sao KORU không vào: `lib/tinhieu.js` **TÍNH `apr`/`afr`/`satDay` rồi vứt đi** — `ghiNhip`/`ghiTinHieu` chỉ ghi `bpr`/`bfr` (phía MUA). Mà **cò LONG phụ thuộc hoàn toàn vào phía BÁN**: 4/5 vế (`K.dem` · `apr ≥ 0,25` · `apr ≥ 2×afr` · `satDay`) **không có ở bảng nào**, chỉ `ddbi` được ghi (đạt 10/101 nhịp). Cò CHỐT LỜI cũng vậy (`ao_short` dùng `K.pr`, `ao_long` dùng `B.pr`). Tức là: bot chạy đúng nhưng **DB không bao giờ trả lời được "vì sao không vào lệnh"** — vi phạm chính nguyên tắc đo lường của dự án. Thêm **8 cột** vào `nhip` (`apr` · `afr` · `sat_dinh` · `sat_day` · `mau_pull_bid/ask` · `co_short` · `co_long`) + **7 cột** vào `tin_hieu` (như trên, trừ `sat_dinh` vì bảng này đã có). ⚠ Theo yêu cầu chủ dự án, **KHÔNG** dùng khối `ALTER` tự động — cột nằm thẳng trong `CREATE TABLE`, DB đang chạy cập nhật **bằng tay** (câu lệnh ở mục 🛠 bên dưới). Hệ quả: DB khôi phục từ bản sao lưu cũ hơn 12/08 sẽ thiếu cột, phải chạy tay lại, nối dây ở `tinhieu.js` → `bot.js` → `db.js`. **202/202 đạt** |

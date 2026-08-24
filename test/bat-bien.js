@@ -77,14 +77,43 @@ kiem('VỐN cứng $200', cfg.VON === 200, cfg.VON);
 kiem('vào lần 1 = $6', cfg.KY_QUY_LAN_1 === 6, cfg.KY_QUY_LAN_1);
 kiem('DCA = $4', cfg.KY_QUY_DCA === 4, cfg.KY_QUY_DCA);
 kiem('⛔ DCA TỐI ĐA 1 LẦN', cfg.SO_LAN_DCA_TOI_DA === 1, cfg.SO_LAN_DCA_TOI_DA);
-kiem('cắt lỗ $20, trần $25', cfg.CAT_LO_USD === 20 && cfg.CAT_LO_USD_TRAN === 25);
+/* ⛔ ĐÃ BỎ mốc cắt lỗ cố định $20/$25 (2026-08-23). Đường cắt nay là
+   trailing bám đỉnh, rộng hẹp theo biên độ 24h của từng coin. */
+kiem('KHÔNG còn mốc cắt lỗ cố định bằng đô',
+  cfg.CAT_LO_USD === undefined && cfg.CAT_LO_USD_TRAN === undefined);
 kiem('cắt lỗ tính bằng ĐÔ — không còn CAT_LO theo %', cfg.CAT_LO === undefined);
+kiem('có nhóm TRAILING', !!cfg.TRAILING && typeof cfg.TRAILING === 'object');
+kiem('trailing neo vào biên độ 24h (hệ số > 0)', cfg.TRAILING.HE_SO_BIEN_DO > 0);
+/* Sàn/trần chọn từ dữ liệu 53 lệnh: dưới 2% giết oan 13 lệnh lãi, trên
+   10% gần như không còn chặn được gì. Khoá lại vùng đã đo. */
+kiem('sàn trailing trong [2%, 4%]',
+  cfg.TRAILING.KHOANG_SAN >= 0.02 && cfg.TRAILING.KHOANG_SAN <= 0.04, cfg.TRAILING.KHOANG_SAN);
+kiem('trần trailing trong [5%, 10%]',
+  cfg.TRAILING.KHOANG_TRAN >= 0.05 && cfg.TRAILING.KHOANG_TRAN <= 0.10, cfg.TRAILING.KHOANG_TRAN);
+kiem('sàn < trần', cfg.TRAILING.KHOANG_SAN < cfg.TRAILING.KHOANG_TRAN);
+kiem('có khoá hoà vốn, đệm phí > 1', cfg.TRAILING.NGUONG_KHOA_VON > 0 && cfg.TRAILING.DEM_HOA_VON > 1);
+/* Van cuối phải RỘNG HƠN mức lỗ trailing tối đa sau DCA, nếu không nó
+   cướp việc của trailing và ta quay lại đúng cắt lỗ cố định. */
+kiem('van cuối LO_TRAN_USD rộng hơn lỗ trailing tối đa sau DCA',
+  cfg.LO_TRAN_USD > cfg.TRAILING.KHOANG_TRAN * (cfg.KY_QUY_LAN_1 + cfg.KY_QUY_DCA) * cfg.DON_BAY,
+  cfg.LO_TRAN_USD);
 kiem('KHÔNG còn thang chốt lời cố định', cfg.THANG_CHOT === undefined);
 kiem('KHÔNG còn TP_TOI_THIEU / NG_RR', cfg.TP_TOI_THIEU === undefined && cfg.NG_RR === undefined);
-kiem('cửa sổ DCA là HÀNG RÀO $4–$10', Array.isArray(cfg.CUA_SO_DCA_USD) && cfg.CUA_SO_DCA_USD[1] <= 10);
+/* ⛔ Cửa sổ DCA phải theo TỶ LỆ. Đo bằng đô cứng thì khi đường cắt hẹp
+   lại, lệnh đóng trước khi kịp lỗ tới cửa sổ → DCA chết âm thầm. */
+kiem('cửa sổ DCA là HÀNG RÀO theo TỶ LỆ, không phải đô',
+  cfg.CUA_SO_DCA_USD === undefined && Array.isArray(cfg.CUA_SO_DCA_TY_LE));
+kiem('cửa sổ DCA nằm trong quãng tới điểm cắt (< 1)',
+  cfg.CUA_SO_DCA_TY_LE[0] > 0 && cfg.CUA_SO_DCA_TY_LE[1] < 1, cfg.CUA_SO_DCA_TY_LE);
 kiem('rào chắn tối thiểu ≥ 30 phút', cfg.RAO_CHAN_TOI_THIEU >= 30, cfg.RAO_CHAN_TOI_THIEU);
 kiem('hồi lại tối thiểu 5 điểm', cfg.HOI_LAI_TOI_THIEU === 5);
-kiem('trần hồi lại ≤ 50% đỉnh (không trả lại quá nửa)', cfg.HOI_LAI_TRAN <= 0.5);
+/* Siết 0,50 → 0,35: 47/54 lệnh có đỉnh <10% nên luôn rơi vào nhánh
+   `TRAN × đỉnh` — trả lại đúng nửa. Tổng đỉnh +$71,56 về đích −$15,49. */
+kiem('trần hồi lại ≤ 35% đỉnh (giữ ≥ 65%)', cfg.HOI_LAI_TRAN <= 0.35, cfg.HOI_LAI_TRAN);
+/* Sàn phí: chốt giữ lại chưa tới nửa đỉnh, nên đỉnh phải > 2× phí khứ
+   hồi mới có cửa hoà. Dưới mức đó chốt CHẮC CHẮN âm — 7/54 lệnh đã dính. */
+kiem('sàn chốt lời ≥ 2× phí khứ hồi',
+  cfg.SAN_CHOT_LOI_PC >= 2 * (2 * cfg.PHI_MOI_LAN), cfg.SAN_CHOT_LOI_PC);
 kiem('DONG_VI_HET_GIO = false', cfg.DONG_VI_HET_GIO === false);
 kiem('DONG_VI_CAU_TRUC = false', cfg.DONG_VI_CAU_TRUC === false);
 kiem('DONG_VI_FUNDING_DAO = false', cfg.DONG_VI_FUNDING_DAO === false);
@@ -92,22 +121,43 @@ kiem('VAO_BANG_GIA_HIEN_TAI = true', cfg.VAO_BANG_GIA_HIEN_TAI === true);
 kiem('KHÔNG có HAN_CHO_VAO', cfg.HAN_CHO_VAO_PHUT === undefined);
 kiem('NGUONG_DAO > NGUONG_VAO', cfg.NGUONG_DAO > cfg.NGUONG_VAO);
 kiem('WARMUP_GIAY >= 300', cfg.WARMUP_GIAY >= 300);
-/* ⛔ TRẦN LỆNH MỞ là bất biến TIỀN: lỗ đồng thời tối đa = N × CAT_LO_USD.
-   N=3 → $60 = 30% vốn $200. Nới N là nới lỗ tối đa theo tỷ lệ thẳng, cộng
-   thêm đòn bẩy ẩn qua tương quan giữa các alt. Đây là con số phải khoá. */
-kiem('trần lệnh mở = 3', cfg.SO_LENH_MO_TOI_DA === 3);
-kiem('lỗ đồng thời tối đa <= 1/3 vốn',
-  cfg.SO_LENH_MO_TOI_DA * cfg.CAT_LO_USD <= cfg.VON / 3);
+/* ⛔ ĐÃ BỎ TRẦN ĐẾM LỆNH (2026-08-23) — trần 3 khoá bot 29,3% thời gian
+   và 37/71 lần SẴN_SÀNG không bao giờ vào được lệnh. Nhưng bất biến TIỀN
+   thì KHÔNG được bỏ: nó chỉ chuyển từ "đếm lệnh" sang "đếm rủi ro". */
+kiem('trần ĐẾM lệnh đã bỏ (null = không giới hạn)',
+  cfg.SO_LENH_MO_TOI_DA === null, cfg.SO_LENH_MO_TOI_DA);
+kiem('có ngân sách RỦI RO thay thế', !!cfg.TRAN_RUI_RO && cfg.TRAN_RUI_RO.TONG_PC > 0);
+/* ⛔ Đây mới là bất biến tiền thật sự. Ngân sách 30% vốn = ĐÚNG bằng
+   ngân sách cũ (3 lệnh × $20 / $200). Rủi ro y hệt, chỉ khác là cùng số
+   tiền đó nay mua được nhiều lệnh hơn vì mỗi lệnh rẻ hơn 4–10 lần. */
+kiem('⛔ ngân sách rủi ro <= 1/3 vốn',
+  cfg.TRAN_RUI_RO.TONG_PC <= 1 / 3, cfg.TRAN_RUI_RO.TONG_PC);
+/* Ngân sách phải mua được ÍT NHẤT vài lệnh, nếu không bỏ trần đếm là vô
+   nghĩa — chỉ đổi một trần chặt lấy một trần chặt khác. */
+kiem('ngân sách mua được >= 4 lệnh ở khoảng trailing rộng nhất',
+  (cfg.TRAN_RUI_RO.TONG_PC * cfg.VON) / (cfg.TRAILING.KHOANG_TRAN * cfg.KY_QUY_LAN_1 * cfg.DON_BAY) >= 4,
+  Math.floor((cfg.TRAN_RUI_RO.TONG_PC * cfg.VON) / (cfg.TRAILING.KHOANG_TRAN * cfg.KY_QUY_LAN_1 * cfg.DON_BAY)));
+kiem('cảnh báo tập trung cùng hướng <= ngân sách tổng',
+  cfg.TRAN_RUI_RO.CANH_BAO_CUNG_HUONG_PC <= cfg.TRAN_RUI_RO.TONG_PC);
 
-/* Số coin theo dõi thì NGƯỢC LẠI — là tham số dò, không phải bất biến.
-   Trước đây hai số này bị khoá chung trong một phép kiểm `=== 3 && === 3`,
-   khiến việc nới cần gạt lấy mẫu không thể làm mà không đồng thời nới cần
-   gạt rủi ro. Đó là lý do phép kiểm cũ sai và bị tách. Chỉ còn giữ hai
-   ràng buộc thật sự có nghĩa: */
-kiem('trần coin >= trần lệnh mở',
-  cfg.SO_COIN_TRAN >= cfg.SO_LENH_MO_TOI_DA);
-kiem('trần coin trong khoảng dò được',
-  cfg.SO_COIN_TRAN >= 3 && cfg.SO_COIN_TRAN <= 40);
+/* Số coin theo dõi: cũng bỏ trần đếm, thay bằng trần RAM — thứ nó thật
+   sự tiêu. Trần RAM đặt sai thì bot bị OOM kill, mà bot chết là KHÔNG AI
+   CANH LỆNH ĐANG MỞ (xem nhóm MẤT SỔ). */
+kiem('trần ĐẾM coin đã bỏ (null = không giới hạn)',
+  cfg.SO_COIN_TRAN === null, cfg.SO_COIN_TRAN);
+kiem('có trần RAM thay thế', cfg.RAM_TRAN_MB > 0 && cfg.RAM_XA_BOT_MB > cfg.RAM_TRAN_MB);
+/* Mốc đo thật: 20 coin → RSS 357,68MB. Trần phải cao hơn mốc ấy, nếu
+   không bot đứng ở mức coin thấp hơn cả bản cũ. */
+kiem('trần RAM cao hơn mốc đã đo (358MB ở 20 coin)', cfg.RAM_TRAN_MB > 400);
+/* ⛔ Hosting chia sẻ: chạm trần tài khoản là bị GIẾT THẲNG, không swap.
+   Node dọn rác lười nên RSS vọt lên trước khi GC chạy → phải chừa đệm
+   rộng. Phép kiểm này tồn tại để lần sau ai nâng trần cho "theo dõi
+   nhiều coin hơn" thì bị chặn lại, thay vì đẩy bot tới chỗ bị OOM kill —
+   mà bot chết là KHÔNG AI CANH LỆNH ĐANG MỞ. */
+kiem('⛔ mức xả RAM ≤ 65% RAM máy chủ (chừa đệm cho GC)',
+  cfg.RAM_XA_BOT_MB <= 0.65 * cfg.RAM_MAY_CHU_MB,
+  Math.round(cfg.RAM_XA_BOT_MB / cfg.RAM_MAY_CHU_MB * 100) + '%');
+kiem('RAM máy chủ được KHAI BÁO, không để code tự đoán', cfg.RAM_MAY_CHU_MB > 0);
 
 /* ================================================================= */
 nhom('⭐ LỌC COIN — số lượng là KẾT QUẢ của bộ lọc, không phải chỉ tiêu');
@@ -187,8 +237,25 @@ nhom('BẤT BIẾN — LỆNH ĐÃ MỞ CHỈ CÓ 3 ĐƯỜNG RA (quét mã ngu�
   };
   const dem = s => (s.match(/this\._dong\s*\(/g) || []).length;
 
-  kiem('_xuLyLenhMo: 2 lời gọi _dong, cả hai là CẮT LỖ',
-    dem(than('_xuLyLenhMo')) === 2 && /cat_lo/.test(than('_xuLyLenhMo')), dem(than('_xuLyLenhMo')));
+  /* 2 lời gọi: đường TRAILING (lý do `trailing` / `trailing_lai`) và VAN
+     CUỐI `lo_tran`. Thêm lời gọi thứ ba ở đây là thêm một đường ra — phải
+     sửa cả bất biến 1 trong CLAUDE.md trước, không lặng lẽ thêm. */
+  kiem('_xuLyLenhMo: 2 lời gọi _dong (trailing + van cuối)',
+    dem(than('_xuLyLenhMo')) === 2
+    && /'trailing/.test(than('_xuLyLenhMo')) && /lo_tran/.test(than('_xuLyLenhMo')),
+    dem(than('_xuLyLenhMo')));
+  /* ⛔ Đường cắt CHỈ ĐƯỢC SIẾT VÀO. Mọi thay đổi `L.giaCat` phải qua
+     `_dayGiaCat()`; gán thẳng ở chỗ khác là mở lại đúng lỗ hổng đã làm
+     mất $41,58 trên 2 lệnh BEAT. Bỏ chú thích trước khi quét, nếu không
+     chính đoạn văn mô tả bất biến này lại làm phép kiểm đỏ. */
+  const boChuThich = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const srcSach = boChuThich(src);
+  const ganGiaCat = (srcSach.match(/\bL\.giaCat\s*=/g) || []).length;
+  const ganTrongDay = (boChuThich(than('_dayGiaCat')).match(/\bL\.giaCat\s*=/g) || []).length;
+  kiem('⛔ mọi phép gán L.giaCat đều nằm trong _dayGiaCat',
+    ganGiaCat > 0 && ganGiaCat === ganTrongDay, { tong: ganGiaCat, trongDay: ganTrongDay });
+  kiem('_dayGiaCat chỉ siết vào — có Math.min cho short và Math.max cho long',
+    /Math\.min\(L\.giaCat/.test(than('_dayGiaCat')) && /Math\.max\(L\.giaCat/.test(than('_dayGiaCat')));
   kiem('_xuLyChotLoi: 1 lời gọi _dong, là CHỐT LỜI',
     dem(than('_xuLyChotLoi')) === 1 && /chot_loi/.test(than('_xuLyChotLoi')), dem(than('_xuLyChotLoi')));
   kiem('⛔ _xuLyDCA KHÔNG BAO GIỜ đóng lệnh', dem(than('_xuLyDCA')) === 0, dem(than('_xuLyDCA')));
@@ -212,27 +279,221 @@ nhom('TIỀN — $6 vào, $4 DCA, đều ×10, KHÔNG co giãn theo vốn');
 }
 
 /* ================================================================= */
-nhom('CẮT LỖ — tính bằng SỐ TIỀN, tự siết sau khi DCA');
+nhom('ĐƯỜNG CẮT — trailing bám đỉnh, KHÔNG còn mốc đô cố định');
 {
+  const SAN = cfg.TRAILING.KHOANG_SAN;
   const { QL, E, st } = moLenhThu(1.0);
-  kiem('giá cắt ≈ +33% khi chưa DCA ($20 trên $60)',
-    Math.abs(st.lenh.giaCat / st.lenh.giaVao1 - 1.3333) < 0.01, G2(st.lenh.giaCat / st.lenh.giaVao1));
+  /* boiCanh thử không có `bienDo24` → `_khoangTrailing` lùi về SÀN. */
+  kiem('thiếu biên độ 24h → lùi về SÀN, không vỡ',
+    Math.abs(st.lenh.khoangTrailing - SAN) < 1e-9, st.lenh.khoangTrailing);
+  kiem('giá cắt đặt đúng 1 khoảng SÀN so với giá vào',
+    Math.abs(st.lenh.giaCat / st.lenh.giaVao1 - (1 + SAN)) < 1e-6,
+    G2(st.lenh.giaCat / st.lenh.giaVao1));
+  kiem('rủi ro thiết kế = khoảng trailing × notional',
+    Math.abs(st.lenh.loThietKeUsd - SAN * 60) < 1e-9, st.lenh.loThietKeUsd);
 
   let dong = false;
-  for (let g = 1.0; g <= 1.7 && !dong; g += 0.01) { dayGia(QL, E, st, g); if (!st.lenh) dong = true; }
-  kiem('lệnh bị cắt khi lỗ chạm ngưỡng tiền', dong);
+  for (let g = 1.0; g <= 1.7 && !dong; g += 0.005) { dayGia(QL, E, st, g); if (!st.lenh) dong = true; }
+  kiem('lệnh bị cắt khi giá chạm đường trailing', dong);
   const h = QL.lichSu[0];
-  kiem('lỗ khi cắt nằm trong −$20…−$27', h && h.pnl <= -19.5 && h.pnl >= -27, h && G2(h.pnl));
-  kiem('R ≈ −1 (mẫu số cố định = mức lỗ thiết kế)', h && h.R <= -0.95 && h.R >= -1.36, h && G2(h.R));
-  kiem('lý do đóng là cắt lỗ', h && /cat_lo/.test(h.lyDo), h && h.lyDo);
+  /* Lỗ ≈ SÀN × $60 cộng phí hai chiều — nhỏ hơn mốc $20 cũ khoảng 10 lần. */
+  kiem('lỗ khi cắt ≈ khoảng trailing × notional (KHÔNG còn −$20)',
+    h && h.pnl <= -(SAN * 60) && h.pnl >= -(SAN * 60) - 1, h && G2(h.pnl));
+  kiem('R ≈ −1 (mẫu số = rủi ro thiết kế của CHÍNH lệnh này)',
+    h && h.R <= -0.95 && h.R >= -1.36, h && G2(h.R));
+  kiem('lý do đóng là trailing', h && /^trailing/.test(h.lyDo), h && h.lyDo);
+}
+
+/* ================================================================= */
+nhom('⛔ ĐƯỜNG CẮT CHỈ SIẾT VÀO — không bao giờ lùi ra');
+{
+  /* Lệnh SHORT: giá giảm là có lãi → đường cắt phải TỤT XUỐNG theo đáy
+     và không bao giờ bò lên lại, kể cả khi giá bật ngược. Đây chính là
+     thứ 2 lệnh BEAT không có: từng lãi rồi quay đầu mà không gì chặn. */
+  const { QL, E, st } = moLenhThu(1.0);
+  const catBanDau = st.lenh.giaCat;
+  dayGia(QL, E, st, 0.94);                       // lãi 6%
+  const catSauLai = st.lenh && st.lenh.giaCat;
+  kiem('giá đi thuận → đường cắt SIẾT theo', catSauLai < catBanDau, G2(catSauLai));
+  if (st.lenh) {
+    dayGia(QL, E, st, 0.955);                    // bật ngược một nhịp
+    kiem('giá bật ngược → đường cắt KHÔNG lùi ra',
+      st.lenh && st.lenh.giaCat <= catSauLai + 1e-9, st.lenh && G2(st.lenh.giaCat));
+  }
+}
+
+/* ================================================================= */
+nhom('⭐ TRẦN RỦI RO thay cho TRẦN ĐẾM — lệnh thắng TRẢ LẠI chỗ');
+{
+  const { QL, st } = moLenhThu(1.0);
+  const L = st.lenh;
+  /* Lệnh vừa mở, giá chưa đi đâu → rủi ro còn lại ≈ rủi ro thiết kế. */
+  kiem('rủi ro còn lại của lệnh mới ≈ rủi ro thiết kế',
+    Math.abs(QL.ruiRoConLai(L) - L.loThietKeUsd) < 0.2, G2(QL.ruiRoConLai(L)));
+  kiem('tổng rủi ro = tổng của từng lệnh',
+    Math.abs(QL.ruiRoDangMo() - QL.ruiRoConLai(L)) < 1e-9);
+  kiem('rủi ro tách được theo hướng',
+    QL.ruiRoTheoHuong().short > 0 && QL.ruiRoTheoHuong().long === 0);
+
+  /* ⭐ Đường cắt siết vào → rủi ro còn lại GIẢM. Đây là cơ chế trả lại
+     chỗ trong ngân sách, và là lý do bỏ được trần đếm. */
+  const truoc = QL.ruiRoConLai(L);
+  dayGia(QL, st._E || null, st, 0.97);
+  kiem('giá đi thuận → rủi ro còn lại GIẢM',
+    st.lenh && QL.ruiRoConLai(st.lenh) < truoc,
+    st.lenh && { truoc: G2(truoc), sau: G2(QL.ruiRoConLai(st.lenh)) });
+
+  /* Lệnh đã khoá hoà vốn thì gần như không còn chiếm ngân sách. */
+  const B = moLenhThu(1.0);
+  dayGia(B.QL, B.E, B.st, 1 - cfg.TRAILING.NGUONG_KHOA_VON * B.st.lenh.khoangTrailing - 0.005);
+  kiem('đã khoá hoà vốn → rủi ro còn lại ≈ 0 (trả lại chỗ)',
+    B.st.lenh && B.st.lenh.daKhoaVon && QL.ruiRoConLai(B.st.lenh) <= 0.01,
+    B.st.lenh && G2(QL.ruiRoConLai(B.st.lenh)));
+}
+
+/* ================================================================= */
+nhom('⛔ MỌI LỐI CHẶN MỞ LỆNH PHẢI GHI SỰ KIỆN (quét mã nguồn)');
+{
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'lenh.js'), 'utf8');
+  const than = ten => {
+    const i = src.indexOf('  ' + ten + '(');
+    if (i < 0) return '';
+    let d = 0, j = src.indexOf('{', i);
+    for (let k = j; k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(j, k); }
+    }
+    return '';
+  };
+  const thanMo = than('_moLenh');
+  /* Trước 2026-08-23 hai lối đầu là `return` trần: không log, không sự
+     kiện. Hậu quả đo được: 37/71 lần SẴN_SÀNG không mở được lệnh mà DB
+     không giải thích nổi vì sao. Chặn im lặng = mù. */
+  kiem('⛔ _moLenh KHÔNG còn `return` trần (mọi lối chặn đều ghi sự kiện)',
+    !/^\s*if \([^)]*\) return;\s*$/m.test(thanMo));
+  for (const ly of ['chan_ngat_mach', 'chan_tran_rui_ro', 'chan_cong_thanh_ly'])
+    kiem(`_moLenh ghi lý do "${ly}"`, thanMo.includes(ly));
+  kiem('cổng trần rủi ro dùng RỦI RO CÒN LẠI, không phải rủi ro lúc mở',
+    /ruiRoDangMo\(\)/.test(thanMo));
+  const src2 = fs.readFileSync(path.join(__dirname, '..', 'bot.js'), 'utf8');
+  kiem('máy quét chặn bằng RAM, không bằng số đếm',
+    /RAM_TRAN_MB/.test(src2) && /RAM_XA_BOT_MB/.test(src2));
+  kiem('RAM vượt ngưỡng xả thì GỠ BỚT coin, không chỉ ngừng thêm',
+    /phaiXa/.test(src2));
+  kiem('⛔ coin ĐANG CÓ LỆNH MỞ vẫn miễn nhiễm khỏi việc gỡ',
+    /if \(st && st\.lenh\) continue;/.test(src2));
+}
+
+/* ================================================================= */
+nhom('⛔ MẤT SỔ — lệnh đang mở VẪN phải được canh');
+{
+  /* Sổ hỏng được phép chặn MỞ lệnh mới. KHÔNG được chặn ĐÓNG lệnh.
+     Trước 2026-08-23 ba lệnh `continue` trong bot.js bỏ qua luôn lệnh
+     đang mở → coin đi ngược lúc mất sổ chạy bao xa cũng không ai đóng. */
+  const A = moLenhThu(1.0);
+  const catBanDau = A.st.lenh.giaCat;
+  kiem('không có lệnh mở → canhLenhMu trả null',
+    new QuanLyLenh(cfg).canhLenhMu('KHONG_CO', 1.0) === null);
+
+  /* mù hoàn toàn: không sổ, không cả ticker */
+  kiem('mất CẢ sổ lẫn ticker → báo khong_co_gia, KHÔNG đoán, KHÔNG đóng',
+    A.QL.canhLenhMu('X', null) === 'khong_co_gia' && !!A.st.lenh);
+  kiem('mù hoàn toàn KHÔNG được đụng vào đường cắt',
+    A.st.lenh.giaCat === catBanDau, A.st.lenh.giaCat);
+
+  /* có giá REST, chưa chạm cắt → canh bình thường */
+  kiem('có giá REST, chưa chạm → canh', A.QL.canhLenhMu('X', 1.01) === 'canh');
+  kiem('canh mù vẫn cập nhật PnL', A.st.lenh.pnlUsd < 0, G2(A.st.lenh.pnlUsd));
+
+  /* giá REST vượt đường cắt → PHẢI đóng dù không có sổ */
+  const kq = A.QL.canhLenhMu('X', catBanDau * 1.02);
+  kiem('giá REST vượt đường cắt → ĐÓNG dù không có sổ', kq === 'dong' && !A.st.lenh, kq);
+  const h = A.QL.lichSu[0];
+  kiem('lý do đóng ghi rõ là đóng mù', h && h.lyDo === 'trailing_mu', h && h.lyDo);
+  /* ⛔ Đóng mù mà giả định khớp hoàn hảo là tự lừa mình đúng lúc thị
+     trường tệ nhất. Phải có phạt trượt. */
+  kiem('đóng mù bị PHẠT TRƯỢT, không phải trượt 0',
+    h && h.truot > 0, h && G2(h.truot));
+
+  /* đường cắt mù dùng CHUNG hàm với đường cắt thường */
+  const B = moLenhThu(1.0);
+  const catB = B.st.lenh.giaCat;
+  B.QL.canhLenhMu('X', 0.94);                       // lãi 6% khi đang mù
+  kiem('canh mù cũng SIẾT đường cắt theo đỉnh', B.st.lenh.giaCat < catB, G2(B.st.lenh.giaCat));
+  const catSau = B.st.lenh.giaCat;
+  B.QL.canhLenhMu('X', 0.955);                      // bật ngược nhưng CHƯA chạm cắt
+  kiem('canh mù cũng KHÔNG nới đường cắt ra',
+    B.st.lenh && B.st.lenh.giaCat <= catSau + 1e-9, B.st.lenh && G2(B.st.lenh.giaCat));
+}
+
+/* ================================================================= */
+nhom('⛔ MẤT SỔ — quét mã nguồn');
+{
+  const srcL = fs.readFileSync(path.join(__dirname, '..', 'lib', 'lenh.js'), 'utf8');
+  const srcB = fs.readFileSync(path.join(__dirname, '..', 'bot.js'), 'utf8');
+  const than = (src, ten) => {
+    const i = src.indexOf('  ' + ten + '(');
+    if (i < 0) return '';
+    let d = 0, j = src.indexOf('{', i);
+    for (let k = j; k < src.length; k++) {
+      if (src[k] === '{') d++;
+      else if (src[k] === '}') { d--; if (!d) return src.slice(j, k); }
+    }
+    return '';
+  };
+  const thanMu = than(srcL, 'canhLenhMu');
+  kiem('canhLenhMu: đúng 2 lời gọi _dong (trailing_mu + lo_tran_mu)',
+    (thanMu.match(/this\._dong\s*\(/g) || []).length === 2
+    && /trailing_mu/.test(thanMu) && /lo_tran_mu/.test(thanMu));
+  /* Cò đảo chiều cần sổ lệnh mới tính được — chạy chốt lời khi mù là
+     quyết định trên dữ liệu không tồn tại. */
+  kiem('⛔ canhLenhMu KHÔNG chạy chốt lời (cò cần sổ)',
+    !/_xuLyChotLoi/.test(thanMu));
+  kiem('⛔ canhLenhMu KHÔNG mở lệnh mới và KHÔNG DCA',
+    !/_moLenh|_xuLyDCA/.test(thanMu));
+  /* Hai nhánh phải dùng CHUNG một hàm cập nhật đường cắt. Chép ra hai
+     bản là bất biến "không bao giờ lùi" sẽ thủng ở nhánh ít ai để mắt. */
+  kiem('hai nhánh dùng CHUNG _capNhatDuongCat',
+    /_capNhatDuongCat/.test(than(srcL, '_xuLyLenhMo')) && /_capNhatDuongCat/.test(thanMu));
+  kiem('đóng mù đi qua _khopMu (có phạt trượt), không phải trượt 0',
+    /_khopMu/.test(than(srcL, '_dong')) && /TRUOT_DONG_MU/.test(than(srcL, '_khopMu')));
+  /* bot.js: vòng lặp KHÔNG được có `continue` trần trước khi canh lệnh */
+  kiem('bot.js gọi canhMu ở nhánh sổ chết', /canhMu\(E, now\); continue;/.test(srcB));
+  kiem('bot.js KHÔNG còn `continue` trần khi sổ hỏng',
+    !/if \(E\.so\.hong\) continue;/.test(srcB)
+    && !/SO_LENH_HET_HAN_MS\) continue;/.test(srcB));
+  kiem('giá dự phòng có kiểm TUỔI ticker (không dùng giá lỗi thời)',
+    /TUOI_TICKER_TOI_DA_MS/.test(than(srcB, 'giaDuPhong') || srcB));
+}
+
+/* ================================================================= */
+nhom('KHOÁ HOÀ VỐN — lệnh đã lãi đủ thì không thể thành lỗ');
+{
+  const { QL, E, st } = moLenhThu(1.0);
+  const giaVao = st.lenh.giaVao1;
+  const K = st.lenh.khoangTrailing;
+  /* đẩy lãi vượt NGUONG_KHOA_VON × K rồi thả cho giá quay hẳn lại */
+  dayGia(QL, E, st, 1 - cfg.TRAILING.NGUONG_KHOA_VON * K - 0.005);
+  kiem('lãi vượt ngưỡng → đã khoá hoà vốn', st.lenh && st.lenh.daKhoaVon === true);
+  kiem('đường cắt không còn nằm dưới giá vào (short: không trên giá vào)',
+    st.lenh && st.lenh.giaCat <= giaVao, st.lenh && G2(st.lenh.giaCat / giaVao));
+  let dong = false;
+  for (let g = 1 - cfg.TRAILING.NGUONG_KHOA_VON * K; g <= 1.2 && !dong; g += 0.005) {
+    dayGia(QL, E, st, g); if (!st.lenh) dong = true;
+  }
+  kiem('giá quay hẳn về → lệnh đóng, và KHÔNG lỗ', dong && QL.lichSu[0].pnl >= 0,
+    QL.lichSu[0] && G2(QL.lichSu[0].pnl));
 }
 
 /* ================================================================= */
 nhom('DCA — hàng rào KHÁC căn cứ');
 {
+  /* ⚠ Bước giá phải NHỎ hơn hẳn bản cũ. Cửa sổ DCA nay là 20–50% quãng
+     đường tới đường cắt, mà đường cắt chỉ còn 3% giá → cửa sổ nằm ở
+     0,6%–1,5% giá. Bước 0,01 của bản cũ nhảy thẳng qua nó. */
   const A = moLenhThu(1.0);
   let daDCA = false;
-  for (let g = 1.02; g <= 1.14 && !daDCA; g += 0.01) {
+  for (let g = 1.004; g <= 1.022 && !daDCA; g += 0.002) {
     A.QL.capNhat('X', A.E, soGia(g), P0(g, { dinhGan: g, dayGan: 1.0, dOi25: 0 }),
       CONG, { ...BC, nenTuChoi: true });
     if (A.st.lenh && A.st.lenh.soLanDCA > 0) daDCA = true;
@@ -241,9 +502,15 @@ nhom('DCA — hàng rào KHÁC căn cứ');
   if (daDCA) {
     kiem('DCA thêm đúng $4 → tổng $10', A.st.lenh.kyQuy === 10, A.st.lenh.kyQuy);
     kiem('giá trị lệnh thành $100', G2(A.st.lenh.notional) === 100, A.st.lenh.notional);
-    kiem('giá cắt SIẾT LẠI sau DCA (< 25% thay vì 33%)',
-      (A.st.lenh.giaCat / A.st.lenh.giaVaoTB - 1) < 0.25, G2(A.st.lenh.giaCat / A.st.lenh.giaVaoTB - 1));
-    for (let g = 1.15; g <= 1.28; g += 0.01) {
+    /* Sau DCA, đường cắt vẫn phải nằm trong đúng MỘT khoảng trailing so
+       với giá vào TB — và tuyệt đối không được nới ra. */
+    kiem('sau DCA đường cắt vẫn ≤ 1 khoảng trailing',
+      (A.st.lenh.giaCat / A.st.lenh.giaVaoTB - 1) <= A.st.lenh.khoangTrailing + 1e-9,
+      G2(A.st.lenh.giaCat / A.st.lenh.giaVaoTB - 1));
+    kiem('rủi ro thiết kế tính lại theo notional MỚI',
+      Math.abs(A.st.lenh.loThietKeUsd - A.st.lenh.khoangTrailing * 100) < 1e-9,
+      A.st.lenh.loThietKeUsd);
+    for (let g = 1.024; g <= 1.05; g += 0.002) {
       A.QL.capNhat('X', A.E, soGia(g), P0(g, { dinhGan: g, dayGan: 1.0, dOi25: 0 }),
         CONG, { ...BC, nenTuChoi: true });
     }
@@ -252,7 +519,7 @@ nhom('DCA — hàng rào KHÁC căn cứ');
   }
 
   const B = moLenhThu(1.0);
-  for (let g = 1.02; g <= 1.12; g += 0.01) {
+  for (let g = 1.004; g <= 1.022; g += 0.002) {
     B.QL.capNhat('X', B.E, soGia(g), P0(g, { dinhGan: g, dayGan: 1.0, dOi25: 0.05, mua5: 5e3 }),
       CONG, { ...BC, nenTuChoi: false });
   }
@@ -279,30 +546,36 @@ nhom('RÀO CHẮN — phiên bản đo được của "khả năng chạm cắt 
 nhom('CHỐT LỜI — đỉnh lãi · báo động · hồi lại');
 {
   const cong = d => Math.min(Math.max(cfg.HOI_LAI_TOI_THIEU, cfg.HOI_LAI_TY_LE * d), cfg.HOI_LAI_TRAN * d);
-  kiem('đỉnh +6% → ngưỡng 3 điểm (không trả quá nửa)', G2(cong(6)) === 3, cong(6));
-  kiem('đỉnh +10% → ngưỡng 5 điểm', G2(cong(10)) === 5, cong(10));
-  kiem('đỉnh +20% → ngưỡng 5 điểm', G2(cong(20)) === 5, cong(20));
-  kiem('đỉnh +40% → ngưỡng 10 điểm', G2(cong(40)) === 10, cong(40));
-  kiem('không bao giờ trả lại quá 50% đỉnh', [4, 6, 10, 20, 40, 80].every(d => cong(d) <= 0.5 * d + 1e-9));
+  /* TRAN hạ 0,50 → 0,35 (2026-08-23): giữ 65% đỉnh thay vì 50%. */
+  kiem('đỉnh +6% → ngưỡng 2,1 điểm (giữ 65%)', G2(cong(6)) === 2.1, cong(6));
+  kiem('đỉnh +10% → ngưỡng 3,5 điểm (giữ 65%)', G2(cong(10)) === 3.5, cong(10));
+  kiem('đỉnh +20% → ngưỡng 5 điểm (giữ 75%)', G2(cong(20)) === 5, cong(20));
+  kiem('đỉnh +40% → ngưỡng 10 điểm (giữ 75%)', G2(cong(40)) === 10, cong(40));
+  kiem('không bao giờ trả lại quá 35% đỉnh',
+    [4, 6, 10, 20, 40, 80].every(d => cong(d) <= 0.35 * d + 1e-9));
 
-  /* --- đúng ví dụ của chủ dự án --- */
+  /* --- đúng ví dụ của chủ dự án ---
+     ⚠ Biên độ nhỏ hơn bản cũ là CỐ Ý. Với đỉnh lớn, đường trailing (3%)
+     siết chặt hơn ngưỡng hồi (35% × đỉnh) nên trailing sẽ đóng lệnh
+     TRƯỚC — đó chính là mục đích. Muốn kiểm riêng nhánh `chot_loi` thì
+     phải ở vùng đỉnh nhỏ, nơi 35% × đỉnh < khoảng trailing. */
   const { QL, E, st } = moLenhThu(1.0);
-  dayGia(QL, E, st, 0.90);
-  kiem('lãi +10% → ghi nhận đỉnh lãi', st.lenh && st.lenh.dinhLai * 100 >= 9, G2(st.lenh.dinhLai * 100));
+  dayGia(QL, E, st, 0.96);
+  kiem('lãi +4% → ghi nhận đỉnh lãi', st.lenh && st.lenh.dinhLai * 100 >= 3.9, G2(st.lenh.dinhLai * 100));
 
-  dayGia(QL, E, st, 0.90, { coCHOT_short: true });
+  dayGia(QL, E, st, 0.96, { coCHOT_short: true });
   kiem('cò đảo nổ khi ĐANG LÃI → GÀI báo động', st.lenh && st.lenh.baoDong === true);
 
-  dayGia(QL, E, st, 0.92, { coCHOT_short: true });
-  kiem('hồi 2 điểm < ngưỡng 5 → VẪN GỒNG ✅', !!st.lenh, st.trangThai);
+  dayGia(QL, E, st, 0.968, { coCHOT_short: true });
+  kiem('hồi 0,8 điểm < ngưỡng 1,4 → VẪN GỒNG ✅', !!st.lenh, st.trangThai);
 
-  dayGia(QL, E, st, 0.87);
-  kiem('đỉnh mới +13% → GỠ báo động ✅',
-    st.lenh && st.lenh.baoDong === false && st.lenh.dinhLai * 100 >= 12,
+  dayGia(QL, E, st, 0.95);
+  kiem('đỉnh mới +5% → GỠ báo động ✅',
+    st.lenh && st.lenh.baoDong === false && st.lenh.dinhLai * 100 >= 4.9,
     st.lenh && { baoDong: st.lenh.baoDong, dinh: G2(st.lenh.dinhLai * 100) });
 
-  dayGia(QL, E, st, 0.87, { coCHOT_short: true });
   dayGia(QL, E, st, 0.95, { coCHOT_short: true });
+  dayGia(QL, E, st, 0.972, { coCHOT_short: true });
   kiem('báo động + hồi đủ sâu → CHỐT LỜI', !st.lenh, st.trangThai);
   const h = QL.lichSu[0];
   kiem('lý do đóng là chot_loi', h && h.lyDo === 'chot_loi', h && h.lyDo);
@@ -310,10 +583,30 @@ nhom('CHỐT LỜI — đỉnh lãi · báo động · hồi lại');
 }
 
 /* ================================================================= */
+nhom('⭐ SÀN PHÍ — đỉnh quá nhỏ thì CẤM chốt lời (chốt là chắc chắn âm)');
+{
+  /* 17/54 lệnh đầu đóng bằng `chot_loi` mà PnL âm; 7 lệnh có đỉnh dưới
+     2× phí khứ hồi — ở đó chốt KHÔNG THỂ dương. Nay bị chặn. */
+  const { QL, E, st } = moLenhThu(1.0);
+  const duoiSan = 1 - cfg.SAN_CHOT_LOI_PC * 0.5;      // đỉnh chỉ bằng nửa sàn
+  dayGia(QL, E, st, duoiSan);
+  dayGia(QL, E, st, duoiSan, { coCHOT_short: true });
+  dayGia(QL, E, st, 1.0, { coCHOT_short: true });      // hồi hết đỉnh
+  kiem('đỉnh dưới sàn phí + cò nổ + hồi hết → KHÔNG chốt, vẫn gồng',
+    !!st.lenh, st.trangThai);
+  kiem('sàn phí đúng bằng 2× phí khứ hồi',
+    Math.abs(cfg.SAN_CHOT_LOI_PC - 2 * (2 * cfg.PHI_MOI_LAN)) < 1e-12, cfg.SAN_CHOT_LOI_PC);
+}
+
+/* ================================================================= */
 nhom('CHỐT LỜI — cò đảo nổ lúc ĐANG LỖ thì KHÔNG đóng');
 {
+  /* ⚠ Mức lỗ phải NÔNG hơn khoảng trailing, nếu không lệnh bị đường cắt
+     đóng và phép kiểm hoá ra đang kiểm nhầm thứ khác. 1,05 của bản cũ
+     (lỗ 5%) nay vượt cả đường cắt 3%. */
   const { QL, E, st } = moLenhThu(1.0);
-  for (let i = 0; i < 30; i++) dayGia(QL, E, st, 1.05, { coCHOT_short: true });
+  const loNong = 1 + cfg.TRAILING.KHOANG_SAN * 0.5;
+  for (let i = 0; i < 30; i++) dayGia(QL, E, st, loNong, { coCHOT_short: true });
   kiem('đang lỗ + cò đảo nổ liên tục → vẫn gồng', !!st.lenh, st.trangThai);
   kiem('không gài báo động khi đang lỗ', st.lenh && st.lenh.baoDong === false);
 }
@@ -692,7 +985,9 @@ nhom('HẠ TẦNG');
     const w2 = new OkxWs();
     const frame = [];
     w2._gui = o => { frame.push(o); return true; };
-    const SO = cfg.SO_COIN_TRAN;
+    /* ⚠ Số coin ở đây là của PHÉP KIỂM, cố ý KHÔNG lấy từ cfg: trần coin
+       đã bỏ (null) và phép kiểm này đo hành vi GOM, không đo trần. */
+    const SO = 20;
     for (let i = 0; i < SO; i++)
       for (const ch of ['books', 'trades', 'open-interest'])
         w2.dangKy(ch, 'C' + i + '-USDT-SWAP');

@@ -160,7 +160,10 @@ async function nap(){
           L.trangThai,
           fg(L.giaHT),
           fg(L.giaVaoTB)+'<span class="du"> '+usd(L.notional)+'</span>',
-          '<span class="d">'+fg(L.giaCat)+'</span><span class="du"> −'+usd(L.catLoUsd)+'</span>',
+          /* đường cắt trailing: giá + rủi ro thiết kế + dấu 🔒 khi đã khoá hoà vốn */
+          '<span class="'+(L.daKhoaVon?'x':'d')+'">'+fg(L.giaCat)+'</span>'
+            +'<span class="du"> '+(L.daKhoaVon?'🔒':'−'+usd(L.loThietKeUsd))
+            +' ('+((L.khoangTrailing||0)*100).toFixed(1)+'%)</span>',
           /* lỗ/lãi bằng ĐÔ — đây mới là thước cắt lỗ, không phải % giá */
           '<b class="'+mau(L.pnlUsd)+'">'+usd(L.pnlUsd)+'</b>',
           dinh>0?'<span class="x">+'+dinh.toFixed(1)+'%</span>':'<span class="m">—</span>',
@@ -203,7 +206,8 @@ async function nap(){
         const moi=kh&&kh.capNhatLuc&&Date.now()-kh.capNhatLuc<60000;
         const keHoach=kh
           ? (moi?'🔄 ':'🔒 ')+'vào '+fg(kh.giaVao)+' · cắt <span class="d">'+fg(kh.giaCat)+'</span>'
-            +'<span class="du"> ('+usd(kh.kyQuy)+'×10=' +usd(kh.notional)+', −'+usd(kh.catLoUsd)+')</span>'
+            +'<span class="du"> ('+usd(kh.kyQuy)+'×10=' +usd(kh.notional)+', −'+usd(kh.loThietKeUsd)
+            +' = '+((kh.khoangTrailing||0)*100).toFixed(1)+'%)</span>'
           : '<span class="m">—</span>';
 
         return {k:c.sym,huong:c.huong||'',o:[
@@ -255,7 +259,7 @@ async function nap(){
         fg(h.giaVao),
         '<span class="l">'+(gioVN(h.tsDong)||'—')+'</span>',
         fg(h.giaDong),
-        '<span class="'+(/cat_lo/.test(h.lyDo)?'d':'m')+'">'+h.lyDo+'</span>',
+        '<span class="'+(/^trailing$|lo_tran/.test(h.lyDo)?'d':(/trailing_lai|chot_loi/.test(h.lyDo)?'x':'m'))+'">'+h.lyDo+'</span>',
         (h.dinhLai>0?'<span class="x">+'+(h.dinhLai*100).toFixed(1)+'%</span>':'<span class="m">—</span>'),
         (h.hoiLai?h.hoiLai.toFixed(1):'<span class="m">—</span>'),
         (h.soLanDCA?'<span class="v">'+h.soLanDCA+'</span>':'<span class="m">0</span>'),

@@ -1,0 +1,11 @@
+# Script chay tren Linux — BUOC phai giu LF.
+# core.autocrlf=true tren Windows se doi thanh CRLF, va `#!/bin/bash`
+# lam Linux bao "bad interpreter" → cron im lang ngung bat bot.
+*.sh text eol=lf
+
+# Nguon va tai lieu: chuan hoa LF trong kho, khoi lech dong khi so diff.
+*.js text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.html text eol=lf
